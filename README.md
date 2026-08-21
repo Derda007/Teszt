@@ -29,9 +29,10 @@ menti.
 ./inditas.sh
 ```
 
-Mindkettő elindítja a kiszolgálót és megnyitja az oldalt a böngészőben. A
-megnyíló terminál- vagy parancssori ablakot **hagyd nyitva**, amíg használod;
-bezárva (vagy `Ctrl+C`-vel) leáll a kiszolgáló.
+Mindkettő elindítja a kiszolgálót, **megvárja, amíg az tényleg válaszol**, és
+csak utána nyitja meg a böngészőt. A megnyíló terminál- vagy parancssori
+ablakot **hagyd nyitva**, amíg használod; bezárva (vagy `Ctrl+C`-vel) leáll a
+kiszolgáló.
 
 Ha inkább kézzel indítanád:
 
@@ -90,6 +91,8 @@ meg is mondja: vidd fölé az egeret, vagy nézd meg a gomb alatti üzenetsávot
 | „Az OCR motor … nem töltődött be” | Hiányzik a `vendor/` könyvtár: `npm install && npm run vendor` |
 | A gomb szürke, de nincs üzenet | Nincs még fájl a listán |
 | Régi verziószám a láblécben | Frissíts `Ctrl`+`Shift`+`R`-rel |
+| `ERR_CONNECTION_REFUSED` / „a localhost elutasította a csatlakozást” | A kiszolgáló nem indult el. Nézd meg az indítófájl ablakát: ha Python hiányt jelez, telepítsd; ha „Address already in use”, a port foglalt |
+| A Windows a Microsoft Store-t nyitja meg a `python` parancsra | Nincs telepítve Python, csak a Windows helyettesítője. Telepítsd a [python.org](https://www.python.org/downloads/)-ról, és pipáld be az *Add python.exe to PATH* opciót |
 
 ## Beállítások
 
