@@ -9,6 +9,11 @@
  * szabályalapú/statisztikai OCR motor WebAssembly formában.
  */
 
+/* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
+   gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
+   index.html "?v=" paramétereit is állítsd ugyanerre. */
+const APP_VERSION = '1.1.0';
+
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
 const asset = (path) => new URL(path, document.baseURI).href;
@@ -100,6 +105,7 @@ const el = {
   downloadBtn: $('downloadBtn'),
   downloadEachBtn: $('downloadEachBtn'),
   copyBtn: $('copyBtn'),
+  appVersion: $('appVersion'),
 };
 
 /* ------------------------------------------------------------------ *
@@ -285,6 +291,12 @@ function renderFiles() {
   el.emptyHint.hidden = has;
   el.startBtn.disabled = !has || state.running || state.blocked;
   el.clearBtn.disabled = !has || state.running;
+
+  /* Letiltott gomb sose maradjon magyarázat nélkül. */
+  if (state.blocked) el.startBtn.title = state.blockedMessage || '';
+  else if (state.running) el.startBtn.title = 'Feldolgozás folyamatban…';
+  else if (!has) el.startBtn.title = 'Előbb adj hozzá legalább egy képet vagy PDF-et.';
+  else el.startBtn.title = '';
 }
 
 function setNote(item, text, cls = '') {
@@ -1321,6 +1333,8 @@ function block(message) {
 
 /* Jelezzük az index.html-ben futó tartaléknak, hogy az alkalmazás elindult. */
 window.__ocrIndult = true;
+
+if (el.appVersion) el.appVersion.textContent = `verzió: ${APP_VERSION}`;
 
 renderFiles();
 checkEnvironment();

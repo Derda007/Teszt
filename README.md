@@ -74,6 +74,23 @@ azokban a böngészőkben, ahol a billentyűparancs nem jut el az oldalig (ilyen
 a böngésző engedélyt kérhet a vágólap olvasásához). A fájlkezelőből másolt
 kép- és PDF-fájlok beillesztése is működik.
 
+## Ha valami nem működik
+
+Az oldal alján látszik a futó **verzió**. Ha az nem egyezik a repóban lévővel
+(`APP_VERSION` az `assets/app.js` elején), akkor a böngésző a gyorsítótárból
+szolgálja ki a régi változatot – frissíts rá `Ctrl`+`Shift`+`R`-rel
+(macOS-en `Cmd`+`Shift`+`R`).
+
+A **Szöveg kinyerése** gomb csak akkor tiltott, ha van rá oka, és ezt mindig
+meg is mondja: vidd fölé az egeret, vagy nézd meg a gomb alatti üzenetsávot.
+
+| Amit látsz | Mi a teendő |
+| --- | --- |
+| „Az oldalt közvetlenül a fájlrendszerről nyitottad meg (file://)” | Indítsd az `inditas.bat` / `inditas.sh` fájllal, és a `http://localhost:8080` címen használd |
+| „Az OCR motor … nem töltődött be” | Hiányzik a `vendor/` könyvtár: `npm install && npm run vendor` |
+| A gomb szürke, de nincs üzenet | Nincs még fájl a listán |
+| Régi verziószám a láblécben | Frissíts `Ctrl`+`Shift`+`R`-rel |
+
 ## Beállítások
 
 | Beállítás | Mire jó |
