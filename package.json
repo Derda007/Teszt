@@ -1,0 +1,18 @@
+{
+  "name": "ocr-szovegkinyero",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Képekből és PDF-ekből nyer ki szöveget OCR-rel, és Markdown fájlként menti. Teljesen a böngészőben fut, AI és feltöltés nélkül.",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "vendor": "./scripts/vendor.sh"
+  },
+  "devDependencies": {
+    "@tesseract.js-data/deu": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/hun": "^1.0.0",
+    "pdfjs-dist": "^4.10.38",
+    "tesseract.js": "^5.1.1",
+    "tesseract.js-core": "^5.1.1"
+  }
+}

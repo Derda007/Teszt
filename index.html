@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OCR Szövegkinyerő – képekből és PDF-ekből Markdown</title>
+  <meta name="description" content="Fotókból és PDF-ekből nyer ki szöveget OCR segítségével, majd Markdown fájlként menti. Teljesen a böngészőben fut, mesterséges intelligencia és feltöltés nélkül.">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+  <script src="vendor/tesseract/tesseract.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true">📄</span>
+      <div>
+        <h1 class="brand__title">OCR Szövegkinyerő</h1>
+        <p class="brand__sub">Fotókból és PDF-ekből Markdown – a böngésződben, AI nélkül</p>
+      </div>
+    </div>
+    <span class="badge" title="A fájlok nem hagyják el a gépedet: minden feldolgozás helyben, a böngészőben történik.">
+      Offline &amp; adatvédő
+    </span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 1. Fájlok -->
+  <section class="card" aria-labelledby="cim-fajlok">
+    <h2 id="cim-fajlok" class="card__title"><span class="step">1</span> Fájlok kiválasztása</h2>
+
+    <div id="dropzone" class="dropzone" tabindex="0" role="button"
+         aria-label="Fájlok kiválasztása: kattints ide, vagy húzd ide a fájlokat">
+      <div class="dropzone__icon" aria-hidden="true">⬆</div>
+      <p class="dropzone__main">Húzd ide a fájlokat, vagy <span class="link">tallózz</span></p>
+      <p class="dropzone__hint">JPG · PNG · WEBP · BMP · GIF · TIFF · PDF — több fájl is megadható</p>
+      <input id="fileInput" type="file" multiple accept="image/*,application/pdf,.pdf,.tif,.tiff" hidden>
+    </div>
+
+    <ul id="fileList" class="filelist" aria-live="polite"></ul>
+
+    <p id="emptyHint" class="muted small">Még nincs kiválasztott fájl.</p>
+  </section>
+
+  <!-- 2. Beállítások -->
+  <section class="card" aria-labelledby="cim-beallitasok">
+    <h2 id="cim-beallitasok" class="card__title"><span class="step">2</span> Beállítások</h2>
+
+    <div class="grid">
+      <div class="field">
+        <label for="langSelect">Felismerés nyelve</label>
+        <select id="langSelect">
+          <option value="hun" selected>Magyar</option>
+          <option value="hun+eng">Magyar + angol</option>
+          <option value="eng">Angol</option>
+          <option value="deu">Német</option>
+          <option value="hun+eng+deu">Magyar + angol + német</option>
+        </select>
+        <p class="hint">Több nyelv lassabb, de vegyes nyelvű dokumentumnál pontosabb.</p>
+      </div>
+
+      <div class="field">
+        <label for="psmSelect">Oldalelrendezés</label>
+        <select id="psmSelect">
+          <option value="3" selected>Automatikus (általános dokumentum)</option>
+          <option value="1">Automatikus, tájolásvizsgálattal</option>
+          <option value="4">Egyhasábos, változó sorméret</option>
+          <option value="6">Egyetlen egybefüggő szövegblokk</option>
+          <option value="11">Ritkás szöveg (feliratok, táblák)</option>
+          <option value="7">Egyetlen szövegsor</option>
+        </select>
+        <p class="hint">Ferde fotónál vagy táblánál érdemes váltani.</p>
+      </div>
+
+      <div class="field">
+        <label for="dpiSelect">PDF-oldalak felbontása</label>
+        <select id="dpiSelect">
+          <option value="150">150 DPI – gyors</option>
+          <option value="220" selected>220 DPI – kiegyensúlyozott</option>
+          <option value="300">300 DPI – pontos</option>
+          <option value="400">400 DPI – apró betűkhöz</option>
+        </select>
+        <p class="hint">Magasabb érték pontosabb, de lassabb és több memóriát igényel.</p>
+      </div>
+
+      <div class="field">
+        <label for="rotateSelect">Elforgatás</label>
+        <select id="rotateSelect">
+          <option value="0" selected>Nincs</option>
+          <option value="90">90° jobbra</option>
+          <option value="180">180°</option>
+          <option value="270">90° balra</option>
+        </select>
+        <p class="hint">Oldalra fordított beolvasás helyretételéhez.</p>
+      </div>
+    </div>
+
+    <details class="details">
+      <summary>Képjavítás és Markdown-formázás</summary>
+
+      <div class="grid grid--two">
+        <fieldset class="fieldset">
+          <legend>Képjavítás felismerés előtt</legend>
+          <label class="check"><input type="checkbox" id="optGray" checked> Szürkeárnyalatossá alakítás</label>
+          <label class="check"><input type="checkbox" id="optContrast" checked> Kontraszt automatikus kiterjesztése</label>
+          <label class="check"><input type="checkbox" id="optBinarize"> Fekete-fehérré alakítás (küszöbölés)</label>
+          <label class="check"><input type="checkbox" id="optUpscale" checked> Kis képek felnagyítása</label>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Markdown kimenet</legend>
+          <label class="check"><input type="checkbox" id="optJoin" checked> Tördelt sorok bekezdéssé fűzése</label>
+          <label class="check"><input type="checkbox" id="optHyphen" checked> Elválasztott szavak összevonása</label>
+          <label class="check"><input type="checkbox" id="optHeadings" checked> Feltehető címsorok jelölése</label>
+          <label class="check"><input type="checkbox" id="optLists" checked> Felsorolások felismerése</label>
+          <label class="check"><input type="checkbox" id="optPageMarks" checked> Oldalcímek beszúrása (PDF)</label>
+          <label class="check"><input type="checkbox" id="optFrontMatter"> YAML fejléc a fájl elejére</label>
+        </fieldset>
+      </div>
+
+      <label class="check check--wide">
+        <input type="checkbox" id="optPdfText" checked>
+        Ha a PDF már tartalmaz valódi szöveget, azt használjuk OCR helyett (sokkal gyorsabb és pontosabb)
+      </label>
+    </details>
+  </section>
+
+  <!-- 3. Feldolgozás -->
+  <section class="card" aria-labelledby="cim-futtatas">
+    <h2 id="cim-futtatas" class="card__title"><span class="step">3</span> Feldolgozás</h2>
+
+    <div class="actions">
+      <button id="startBtn" class="btn btn--primary" disabled>Szöveg kinyerése</button>
+      <button id="cancelBtn" class="btn" hidden>Megszakítás</button>
+      <button id="clearBtn" class="btn btn--ghost" disabled>Lista ürítése</button>
+    </div>
+
+    <div id="progressBox" class="progress" hidden>
+      <div class="progress__bar"><div id="progressFill" class="progress__fill"></div></div>
+      <p id="progressText" class="progress__text" aria-live="polite">Előkészítés…</p>
+    </div>
+
+    <p id="statusMsg" class="status" role="status" hidden></p>
+  </section>
+
+  <!-- 4. Eredmény -->
+  <section id="resultCard" class="card" aria-labelledby="cim-eredmeny" hidden>
+    <h2 id="cim-eredmeny" class="card__title"><span class="step">4</span> Eredmény</h2>
+
+    <div class="resulthead">
+      <div class="tabs" role="tablist" aria-label="Nézetváltás">
+        <button id="tabPreview" class="tab is-active" role="tab" aria-selected="true">Előnézet</button>
+        <button id="tabSource" class="tab" role="tab" aria-selected="false">Markdown forrás</button>
+      </div>
+      <p id="resultMeta" class="muted small"></p>
+    </div>
+
+    <div id="previewPane" class="preview" role="tabpanel" aria-labelledby="tabPreview"></div>
+    <textarea id="sourcePane" class="source" role="tabpanel" aria-labelledby="tabSource"
+              spellcheck="false" hidden aria-label="Markdown forrás, szerkeszthető"></textarea>
+
+    <div class="actions">
+      <button id="downloadBtn" class="btn btn--primary">Letöltés .md fájlként</button>
+      <button id="downloadEachBtn" class="btn" hidden>Letöltés fájlonként</button>
+      <button id="copyBtn" class="btn">Másolás vágólapra</button>
+    </div>
+    <p class="hint">A forrásnézetben szabadon átírhatod a szöveget – a letöltés és a másolás mindig az itt látható tartalmat menti.</p>
+  </section>
+
+  <section class="card card--info">
+    <h2 class="card__title">Hogyan működik?</h2>
+    <ul class="infolist">
+      <li><strong>Nincs benne mesterséges intelligencia és nincs felhő.</strong> A felismerést a klasszikus Tesseract OCR motor végzi, WebAssembly formában, a saját böngésződben. A fájljaid nem töltődnek fel sehová.</li>
+      <li><strong>Offline is működik.</strong> A motor, a nyelvi adatok és a PDF-olvasó az oldal mellett vannak, külső szolgáltatás nem kell hozzá.</li>
+      <li><strong>Jó minőségű beolvasás = jó eredmény.</strong> Egyenes, éles, jól megvilágított kép, legalább 200–300 DPI. Ferde vagy homályos fotónál az OCR is hibázni fog.</li>
+      <li><strong>Az eredmény szerkeszthető.</strong> Az OCR sosem tökéletes; a Markdown forrás nézetben javíthatod, mielőtt letöltöd.</li>
+    </ul>
+  </section>
+
+</main>
+
+<footer class="footer wrap">
+  <p>Tesseract.js (Apache-2.0) &amp; pdf.js (Apache-2.0) felhasználásával. Minden feldolgozás helyben történik.</p>
+</footer>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>
