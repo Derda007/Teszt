@@ -65,9 +65,9 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new SajatWebChromeClient());
         webView.addJavascriptInterface(new MentesHid(this), MentesHid.NEV);
 
-        if (mentettAllapot != null) {
-            webView.restoreState(mentettAllapot);
-        } else {
+        /* Folyamat-újraindítás után az előzményekből állunk vissza; ha nincs
+           mit visszaállítani, egyszerűen betöltjük az oldalt. */
+        if (mentettAllapot == null || webView.restoreState(mentettAllapot) == null) {
             webView.loadUrl(EszkozKiszolgalo.EREDET + "/index.html");
         }
     }
@@ -297,7 +297,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle allapot) {
         super.onSaveInstanceState(allapot);
-        webView.saveState(allapot);
+        if (webView != null) {
+            webView.saveState(allapot);
+        }
     }
 
     @Override

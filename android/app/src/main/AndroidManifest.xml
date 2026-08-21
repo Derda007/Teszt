@@ -11,6 +11,26 @@
     -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!--
+      Android 11-től egy alkalmazás alapból nem "látja" a többi telepített
+      alkalmazást. E nélkül a felsorolás nélkül a rendszer azt válaszolná,
+      hogy nincs kameraalkalmazás, és a fényképezés soha nem jelenne meg a
+      fájlválasztóban.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

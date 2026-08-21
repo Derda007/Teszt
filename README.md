@@ -75,6 +75,79 @@ azokban a böngészőkben, ahol a billentyűparancs nem jut el az oldalig (ilyen
 a böngésző engedélyt kérhet a vágólap olvasásához). A fájlkezelőből másolt
 kép- és PDF-fájlok beillesztése is működik.
 
+## Android-alkalmazás (APK)
+
+Ugyanez az alkalmazás telefonon is fut, APK-ba csomagolva. A felismerés ott is
+a készüléken történik, és az app **nem kér internet-engedélyt** – technikailag
+sem tud adatot kiküldeni.
+
+* **Fotózás a helyszínen.** A fájlválasztóban a telefon kameraalkalmazása is
+  megjelenik: lefotózod a papírt, és a kép azonnal felismerésre kerül. Ehhez
+  sem kamera-, sem tárhelyengedély nem kell – a fényképezést a rendszer
+  kameraalkalmazása végzi, mi csak a kész képet vesszük át.
+* **Galéria és fájlok.** Bármelyik korábbi fotó vagy PDF is választható,
+  egyszerre több is.
+* **Mentés.** A Markdown a **Letöltések** mappába kerül (Android 10-től),
+  régebbi rendszereken az alkalmazás mappájába, és rögtön meg is osztható.
+* A telefon sötét/világos témáját átveszi.
+
+### Az APK letöltése
+
+A fordítás GitHub Actionsben fut, így semmit nem kell telepítened:
+
+1. Nyisd meg a repó **Actions** fülét
+2. Válaszd az **Android APK** futást
+3. A futás alján, az **Artifacts** résznél töltsd le az
+   `OCR-Szovegkinyero-APK` csomagot
+4. Csomagold ki, másold a telefonra, és nyisd meg a fájlkezelőből
+
+Első telepítéskor a telefon engedélyt kér az ismeretlen forrásból származó
+alkalmazásokhoz – ez a sideloading szokásos lépése.
+
+### Fordítás a saját gépeden (PowerShell)
+
+Ha inkább magad fordítanád, egyetlen szkript letölti az egész eszközláncot:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\android\apk-forditas.ps1
+```
+
+Semmit nem telepít a rendszerbe és nem nyúl a PATH-hoz: a JDK 17, az Android
+SDK és a fordítóeszközök mind az `android\.eszkozok` mappába kerülnek (kb.
+600 MB). Ha nincs rá többé szükséged, elég ezt a mappát törölni.
+
+macOS-en és Linuxon:
+
+```bash
+cd android && ./gradlew assembleDebug
+```
+
+A kész APK: `android/app/build/outputs/apk/debug/app-debug.apk`
+
+### Az Android-változat felépítése
+
+```
+android/app/src/main/java/hu/ocr/szovegkinyero/
+  MainActivity.java        WebView, fájlválasztó kamerával, életciklus
+  EszkozKiszolgalo.java    a weboldal kiszolgálása az APK-ból
+  MentesHid.java           a Markdown natív mentése
+```
+
+A weboldal nem másolódik be a repóba még egyszer: fordításkor a Gradle a repó
+gyökeréből másolja az `index.html`, `assets/` és `vendor/` tartalmat az APK
+`assets/web/` könyvtárába. Ugyanaz a kód fut a böngészőben és a telefonon.
+
+Az alkalmazás a lapot egy saját https eredetről (`https://ocr.helyi`) szolgálja
+ki, nem `file://`-ról. Ez ugyanaz a korlát, mint az asztali változatnál: a
+fájlrendszerről betöltött oldal nem tölthet be WebAssembly-modult és
+háttérszálat. A kéréseket az alkalmazás fogja el és az APK-ból válaszolja meg,
+így hálózati forgalom nem keletkezik.
+
+Az `android/app/debug.keystore` szándékosan a repóban van: ez egy nyilvános
+**hibakeresési** kulcs, aminek csak annyi szerepe van, hogy minden fordítás
+ugyanazzal az aláírással készüljön – így frissítéskor nem kell letörölni az
+előző változatot. Éles, boltba szánt közzétételhez saját kulcs kell.
+
 ## Ha valami nem működik
 
 Az oldal alján látszik a futó **verzió**. Ha az nem egyezik a repóban lévővel
