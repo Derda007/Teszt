@@ -2,3 +2,10 @@ node_modules/
 package-lock.json
 .DS_Store
 tmp/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.eszkozok/

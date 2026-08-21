@@ -1,0 +1,85 @@
+plugins {
+    id 'com.android.application'
+}
+
+/*
+ * A webalkalmazás (index.html, assets/, vendor/) a repó gyökerében él, és
+ * ugyanaz a kód fut a böngészőben és a telefonon. Fordításkor bemásoljuk az
+ * APK assets/web/ könyvtárába, hogy ne kelljen duplán tárolni a fájlokat.
+ */
+def webAppForras = rootProject.file('..')
+def webAppCel = layout.buildDirectory.dir('generated/webapp').get().asFile
+
+def webAppMasolas = tasks.register('webAppMasolas', Copy) {
+    description = 'A webalkalmazás bemásolása az APK assets könyvtárába'
+    from(webAppForras) {
+        include 'index.html'
+        include 'assets/**'
+        include 'vendor/**'
+    }
+    into new File(webAppCel, 'web')
+}
+
+android {
+    namespace 'hu.ocr.szovegkinyero'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'hu.ocr.szovegkinyero'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.1.0'
+    }
+
+    signingConfigs {
+        debug {
+            /* A repóban lévő, szándékosan nyilvános hibakeresési kulcs. Csak
+               annyit garantál, hogy a gépeden minden build ugyanazzal az
+               aláírással készül, így a frissítéshez nem kell letörölni az
+               előző változatot. Éles közzétételre nem alkalmas. */
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += webAppCel
+        }
+    }
+
+    /* A nyelvi adatfájlok és a WebAssembly-mag már tömörítettek: újratömörítve
+       csak lassabb lenne a betöltésük. */
+    androidResources {
+        noCompress.add('gz')
+        noCompress.add('traineddata')
+        noCompress.add('wasm')
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+}
+
+tasks.named('preBuild').configure {
+    dependsOn webAppMasolas
+}

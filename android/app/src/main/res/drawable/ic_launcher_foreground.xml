@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dokumentum nagyítóval: a beolvasott lapból kinyert szöveg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- A lap -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,26h22l16,16v36c0,3.3 -2.7,6 -6,6H36c-3.3,0 -6,-2.7 -6,-6V32c0,-3.3 2.7,-6 6,-6z" />
+
+    <!-- Behajtott sarok -->
+    <path
+        android:fillColor="#B9CDF2"
+        android:pathData="M58,26l16,16H62c-2.2,0 -4,-1.8 -4,-4V26z" />
+
+    <!-- Szövegsorok -->
+    <path
+        android:fillColor="#2F6BD8"
+        android:pathData="M38,50h20v4H38zM38,58h28v4H38zM38,66h16v4H38z" />
+
+    <!-- Nagyító -->
+    <path
+        android:fillColor="#1B3F86"
+        android:pathData="M66,58m-11,0a11,11 0 1,0 22,0a11,11 0 1,0 -22,0zM66,51.5a6.5,6.5 0 1,1 0,13a6.5,6.5 0 1,1 0,-13z" />
+    <path
+        android:fillColor="#1B3F86"
+        android:pathData="M73.6,65.6l4.2,-4.2l9.9,9.9c1.2,1.2 1.2,3 0,4.2c-1.2,1.2 -3,1.2 -4.2,0z" />
+</vector>

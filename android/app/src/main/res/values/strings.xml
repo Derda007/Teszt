@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OCR Szövegkinyerő</string>
+    <string name="fajl_valasztas">Kép vagy PDF kiválasztása</string>
+    <string name="megosztas">Markdown megosztása</string>
+    <string name="mentve">Mentve: %1$s</string>
+    <string name="mentes_hiba">A mentés nem sikerült: %1$s</string>
+    <string name="nincs_fajlkezelo">Nem található fájlkezelő alkalmazás.</string>
+    <string name="nincs_bongeszo">Nem található böngésző.</string>
+</resources>

@@ -1,0 +1,50 @@
+name: Android APK
+
+# A fordítás itt fut le, felszerelt Android SDK-val: a kész APK a futás
+# végén letölthető melléklet (Artifacts) lesz.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android/**'
+      - 'assets/**'
+      - 'vendor/**'
+      - 'index.html'
+      - '.github/workflows/android.yml'
+
+jobs:
+  apk:
+    name: APK fordítása
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Forráskód letöltése
+        uses: actions/checkout@v4
+
+      - name: JDK 17 beállítása
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle gyorsítótár
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: APK fordítása
+        working-directory: android
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Az APK adatai
+        working-directory: android
+        run: |
+          echo "### Elkészült APK" >> "$GITHUB_STEP_SUMMARY"
+          for f in app/build/outputs/apk/debug/*.apk; do
+            echo "- \`$(basename "$f")\` – $(du -h "$f" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: APK feltöltése
+        uses: actions/upload-artifact@v4
+        with:
+          name: OCR-Szovegkinyero-APK
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

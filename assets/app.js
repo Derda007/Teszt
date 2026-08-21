@@ -1178,6 +1178,18 @@ function safeFileName(name) {
 }
 
 function downloadMarkdown(text, fileName) {
+  /* Az Android-alkalmazásban a natív mentést használjuk: a WebView a
+     letöltési hivatkozásokat (főleg a blob: címeket) nem kezeli
+     megbízhatóan. Böngészőben ez a híd nem létezik. */
+  if (window.OcrAndroid && typeof window.OcrAndroid.mentes === 'function') {
+    try {
+      window.OcrAndroid.mentes(fileName, text);
+      return;
+    } catch (err) {
+      console.warn('A natív mentés nem sikerült, marad a böngészős út.', err);
+    }
+  }
+
   const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

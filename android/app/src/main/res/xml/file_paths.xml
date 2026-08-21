@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- A kamerával készített képek az alkalmazás saját könyvtárában. -->
+    <files-path name="fotok" path="fotok/" />
+    <!-- A Markdown fájlok régebbi rendszereken, megosztáshoz. -->
+    <external-files-path name="dokumentumok" path="Documents/" />
+    <files-path name="belso" path="." />
+</paths>
