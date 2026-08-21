@@ -1295,9 +1295,10 @@ window.addEventListener('beforeunload', (e) => {
 function checkEnvironment() {
   if (location.protocol === 'file:') {
     block('Az oldalt közvetlenül a fájlrendszerről nyitottad meg (file://). A böngésző '
-      + 'biztonsági szabályai miatt így nem tölthető be az OCR motor. Indíts egy helyi '
-      + 'kiszolgálót a projekt könyvtárában: python3 -m http.server 8080 – majd nyisd meg '
-      + 'a http://localhost:8080 címet.');
+      + 'biztonsági szabályai miatt így nem tölthető be az OCR motor. Indítsd inkább a '
+      + 'projekt könyvtárában lévő inditas.bat (Windows) vagy inditas.sh (macOS, Linux) '
+      + 'fájllal: az elindítja a helyi kiszolgálót és megnyitja a jó címet. Kézzel: '
+      + 'python3 -m http.server 8080, majd http://localhost:8080');
     return;
   }
 

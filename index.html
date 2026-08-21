@@ -33,8 +33,9 @@
       var doboz = document.getElementById('statusMsg');
       if (doboz) {
         doboz.textContent = window.__ocrHiba
-          || ('Az alkalmazás nem indult el (' + location.protocol + '). Nyisd meg helyi '
-              + 'kiszolgálóról: python3 -m http.server 8080, majd http://localhost:8080');
+          || ('Az alkalmazás nem indult el (' + location.protocol + '). Indítsd a projekt '
+              + 'könyvtárában lévő inditas.bat (Windows) vagy inditas.sh (macOS, Linux) '
+              + 'fájllal, és a http://localhost:8080 címen nyisd meg.');
         doboz.className = 'status is-err';
         doboz.hidden = false;
       }

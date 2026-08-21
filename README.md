@@ -16,20 +16,41 @@ menti.
 
 ## Indítás
 
-> **Fontos:** az `index.html` fájlra duplán kattintva (`file://`) az oldal nem
-> működik – a böngészők biztonsági szabályai miatt így nem tölthető be a
-> WebAssembly-motor és a nyelvi adatfájl. Az oldal ilyenkor ki is írja ezt.
-> Indíts helyette egy helyi webkiszolgálót:
+> **Az `index.html`-re duplán kattintva az oldal nem működik.** Ilyenkor a
+> böngésző `file://` módban nyitja meg, és a biztonsági szabályai miatt nem
+> engedi betölteni a WebAssembly-motort és a nyelvi adatfájlt. Az oldal ezt ki
+> is írja. Egy helyi kiszolgáló kell hozzá – ehhez vannak az indítófájlok:
+
+**Windows:** kattints duplán az **`inditas.bat`** fájlra.
+
+**macOS / Linux:** a projekt könyvtárában futtasd:
 
 ```bash
-git clone <a repó címe>
-cd Teszt
-python3 -m http.server 8080      # vagy: npm start
+./inditas.sh
+```
+
+Mindkettő elindítja a kiszolgálót és megnyitja az oldalt a böngészőben. A
+megnyíló terminál- vagy parancssori ablakot **hagyd nyitva**, amíg használod;
+bezárva (vagy `Ctrl+C`-vel) leáll a kiszolgáló.
+
+Ha inkább kézzel indítanád:
+
+```bash
+python3 -m http.server 8080      # vagy: node scripts/server.js
 ```
 
 Ezután nyisd meg: <http://localhost:8080>
 
-A `vendor/` könyvtár a repóban van, így **telepítés nélkül** azonnal használható.
+Az indítófájlok Pythont keresnek, és ha nincs, Node.js-t. Ha egyik sincs a
+gépen, kiírják, honnan telepíthető. A `vendor/` könyvtár a repóban van, így
+**telepítés nélkül** azonnal használható.
+
+### Kiszolgáló nélkül: GitHub Pages
+
+Ha nem akarsz semmit indítani a saját gépeden, tedd közzé a repót GitHub
+Pages-en (a repó **Settings → Pages** menüjében válaszd ki ezt az ágat), és az
+oldal onnantól egy webcímről is használható. A feldolgozás ettől még ugyanúgy
+a böngésződben történik – a fájljaid akkor sem töltődnek fel sehová.
 
 ## Használat
 
@@ -97,8 +118,11 @@ Az OCR sosem tökéletes: az eredmény a **Markdown forrás** nézetben szabadon
 
 ```
 index.html              a felület
+inditas.bat             indítás Windowson (duplakattintás)
+inditas.sh              indítás macOS-en és Linuxon
 assets/styles.css       megjelenés (világos és sötét témával)
 assets/app.js           az alkalmazás logikája
+scripts/server.js       tartalék statikus kiszolgáló, ha nincs Python
 vendor/tesseract/       tesseract.js + WebAssembly mag
 vendor/tessdata/        nyelvi adatok (hun, eng, deu)
 vendor/pdfjs/           pdf.js + cmap-ek és szabványos betűkészletek
