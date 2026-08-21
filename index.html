@@ -6,24 +6,41 @@
   <title>OCR Szövegkinyerő – képekből és PDF-ekből Markdown</title>
   <meta name="description" content="Fotókból és PDF-ekből nyer ki szöveget OCR segítségével, majd Markdown fájlként menti. Teljesen a böngészőben fut, mesterséges intelligencia és feltöltés nélkül.">
   <link rel="stylesheet" href="assets/styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E">
 
   <script>
     /* Ez a szkript szándékosan a legegyszerűbb formában fut le, még az
-       alkalmazás előtt: ha bármi nem töltődik be, legyen mit kiírni. */
+       alkalmazás előtt: ha az alkalmazás el sem indul, legyen mit kiírni.
+
+       FONTOS: itt csak FELJEGYEZZÜK a bajt. Hogy tényleg akadálya-e a
+       működésnek, azt az app.js dönti el – egy meg nem jelenő favicon
+       vagy stíluslap még nem ok arra, hogy letiltsuk a felismerést. */
+    window.__ocrIndult = false;
     window.__ocrHiba = null;
-    if (location.protocol === 'file:') {
-      window.__ocrHiba = 'Az oldalt közvetlenül a fájlrendszerről nyitottad meg. A böngésző '
-        + 'biztonsági szabályai miatt így nem tölthető be az OCR motor. Indíts egy helyi '
-        + 'kiszolgálót a projekt könyvtárában: python3 -m http.server 8080 – majd nyisd meg '
-        + 'a http://localhost:8080 címet.';
-    }
+
     window.addEventListener('error', function (e) {
-      if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-        window.__ocrHiba = 'Nem sikerült betölteni: ' + (e.target.src || e.target.href)
+      var cel = e.target;
+      if (cel && cel.tagName === 'SCRIPT' && cel.src) {
+        window.__ocrHiba = 'Nem sikerült betölteni ezt a fájlt: ' + cel.src
           + ' – ellenőrizd, hogy a vendor/ könyvtár a helyén van-e.';
       }
     }, true);
+
+    /* Ha az app.js maga sem futott le, a felhasználó ne egy néma,
+       halott felülettel maradjon. */
+    window.addEventListener('load', function () {
+      if (window.__ocrIndult) return;
+      var doboz = document.getElementById('statusMsg');
+      if (doboz) {
+        doboz.textContent = window.__ocrHiba
+          || ('Az alkalmazás nem indult el (' + location.protocol + '). Nyisd meg helyi '
+              + 'kiszolgálóról: python3 -m http.server 8080, majd http://localhost:8080');
+        doboz.className = 'status is-err';
+        doboz.hidden = false;
+      }
+      var gomb = document.getElementById('startBtn');
+      if (gomb) gomb.disabled = true;
+    });
   </script>
 
   <script src="vendor/tesseract/tesseract.min.js"></script>

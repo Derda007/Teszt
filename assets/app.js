@@ -112,6 +112,7 @@ const state = {
   running: false,
   cancelled: false,
   blocked: false,
+  blockedMessage: null,
   worker: null,
   workerLang: null,
   nextId: 1,
@@ -303,12 +304,23 @@ function formatSize(bytes) {
  * ------------------------------------------------------------------ */
 
 function setStatus(text, kind = 'ok') {
+  /* Amíg a működésnek valódi akadálya van, az marad a képernyőn. */
+  if (state.blockedMessage && kind !== 'err') {
+    text = state.blockedMessage;
+    kind = 'err';
+  }
   el.statusMsg.textContent = text;
   el.statusMsg.className = `status is-${kind}`;
   el.statusMsg.hidden = false;
 }
 
 function hideStatus() {
+  /* A működést gátló hibát nem söpörjük el – különben a felhasználó
+     csak egy megmagyarázatlanul letiltott gombot látna. */
+  if (state.blockedMessage) {
+    setStatus(state.blockedMessage, 'err');
+    return;
+  }
   el.statusMsg.hidden = true;
 }
 
@@ -1275,21 +1287,39 @@ window.addEventListener('beforeunload', (e) => {
 
 /* A böngésző biztonsági szabályai miatt a WebAssembly-motor és a nyelvi
    fájlok nem tölthetők be közvetlenül a fájlrendszerről. */
+/**
+ * Csak az igazi akadály tiltsa le a felismerést. Egy meg nem jelenő
+ * favicon vagy stíluslap nem az – azt legfeljebb figyelmeztetésként
+ * érdemes jelezni.
+ */
 function checkEnvironment() {
-  /* A hibát az index.html elején futó apró szkript is észlelhette. */
-  if (window.__ocrHiba) {
-    setStatus(window.__ocrHiba, 'err');
-    state.blocked = true;
-    renderFiles();
+  if (location.protocol === 'file:') {
+    block('Az oldalt közvetlenül a fájlrendszerről nyitottad meg (file://). A böngésző '
+      + 'biztonsági szabályai miatt így nem tölthető be az OCR motor. Indíts egy helyi '
+      + 'kiszolgálót a projekt könyvtárában: python3 -m http.server 8080 – majd nyisd meg '
+      + 'a http://localhost:8080 címet.');
     return;
   }
+
   if (typeof Tesseract === 'undefined') {
-    setStatus('Az OCR motor nem töltődött be. Ellenőrizd, hogy a vendor/ könyvtár a helyén van-e '
-      + '(npm install && npm run vendor).', 'err');
-    state.blocked = true;
-    renderFiles();
+    block('Az OCR motor (vendor/tesseract/tesseract.min.js) nem töltődött be. Ellenőrizd, '
+      + 'hogy a vendor/ könyvtár a helyén van-e: npm install && npm run vendor');
+    return;
   }
+
+  if (window.__ocrHiba) setStatus(window.__ocrHiba, 'warn');
 }
+
+function block(message) {
+  state.blocked = true;
+  state.blockedMessage = message;
+  el.startBtn.title = message;
+  setStatus(message, 'err');
+  renderFiles();
+}
+
+/* Jelezzük az index.html-ben futó tartaléknak, hogy az alkalmazás elindult. */
+window.__ocrIndult = true;
 
 renderFiles();
 checkEnvironment();
