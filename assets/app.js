@@ -45,9 +45,15 @@ const TESSERACT_PATHS = {
   get langPath() { return asset('vendor/tessdata'); },
 };
 
+/* Az Android-alkalmazásban a beágyazott böngészőmotor kapja ezt a lapot.
+   A mentési híd jelenlétéből tudjuk, hogy ott futunk. */
+const ANDROID_ALKALMAZAS = typeof window.OcrAndroid !== 'undefined';
+
 /* A felismerésnél a Tesseract legfeljebb ekkora oldalt kap; e fölött
-   arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon. */
-const MAX_SIDE = 4200;
+   arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon.
+   Telefonon szűkösebb a memória, egy mai kameraképnél pedig 3200 képpont
+   is bőven elég a jó felismeréshez. */
+const MAX_SIDE = ANDROID_ALKALMAZAS ? 3200 : 4200;
 
 const NYELV_NEVEK = { hun: 'magyar', eng: 'angol', deu: 'német' };
 
@@ -485,6 +491,10 @@ async function getWorker(lang, onProgress) {
 
   state.worker = await Tesseract.createWorker(lang, 1, {
     ...TESSERACT_PATHS,
+    /* A beágyazott böngészőmotor egyes változatai nem engedik át a
+       blob:-ból indított háttérszál kéréseit, ezért ott a worker fájlját
+       közvetlenül a saját címéről töltjük be. */
+    workerBlobURL: !ANDROID_ALKALMAZAS,
     logger: (m) => { if (progressHook) progressHook(m); },
   });
   state.workerLang = lang;
