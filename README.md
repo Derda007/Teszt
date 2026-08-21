@@ -16,9 +16,10 @@ menti.
 
 ## Indítás
 
-A böngészők biztonsági szabályai miatt az oldalt **webkiszolgálóról** kell
-megnyitni – a `file://` protokoll nem működik (a WebAssembly-motor és a nyelvi
-fájlok nem töltődnének be).
+> **Fontos:** az `index.html` fájlra duplán kattintva (`file://`) az oldal nem
+> működik – a böngészők biztonsági szabályai miatt így nem tölthető be a
+> WebAssembly-motor és a nyelvi adatfájl. Az oldal ilyenkor ki is írja ezt.
+> Indíts helyette egy helyi webkiszolgálót:
 
 ```bash
 git clone <a repó címe>
@@ -32,8 +33,9 @@ A `vendor/` könyvtár a repóban van, így **telepítés nélkül** azonnal has
 
 ## Használat
 
-1. **Fájlok kiválasztása** – húzd a fájlokat a kijelölt területre, vagy tallózz.
-   Támogatott: JPG, PNG, WEBP, BMP, GIF, TIFF és PDF. Több fájl is megadható.
+1. **Fájlok kiválasztása** – húzd a fájlokat a kijelölt területre, tallózz, vagy
+   **illeszd be a vágólapról `Ctrl+V`-vel**. Támogatott: JPG, PNG, WEBP, BMP,
+   GIF, TIFF és PDF. Több fájl is megadható.
 2. **Beállítások** – nyelv, oldalelrendezés, PDF-felbontás, elforgatás; a
    lenyíló részben képjavítás és Markdown-formázási kapcsolók.
 3. **Szöveg kinyerése** – a folyamat közben látszik, hol tart, és bármikor
@@ -41,6 +43,15 @@ A `vendor/` könyvtár a repóban van, így **telepítés nélkül** azonnal has
 4. **Eredmény** – előnézet vagy szerkeszthető Markdown forrás, majd letöltés
    `.md` fájlként (több fájl esetén egyben vagy külön-külön), illetve másolás
    vágólapra.
+
+### Képernyőkép beillesztése
+
+Készíts kivágást (Windows: `Win`+`Shift`+`S`, macOS: `Cmd`+`Ctrl`+`Shift`+`4`),
+majd nyomj `Ctrl`+`V`-t az oldalon: a kép `vagolap-1.png`, `vagolap-2.png` …
+néven azonnal a listába kerül. A **Beillesztés vágólapról** gomb ugyanezt teszi
+azokban a böngészőkben, ahol a billentyűparancs nem jut el az oldalig (ilyenkor
+a böngésző engedélyt kérhet a vágólap olvasásához). A fájlkezelőből másolt
+kép- és PDF-fájlok beillesztése is működik.
 
 ## Beállítások
 

@@ -9,20 +9,35 @@
  * szabályalapú/statisztikai OCR motor WebAssembly formában.
  */
 
-import * as pdfjsLib from '../vendor/pdfjs/pdf.min.mjs';
+/* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
+   projekt alkönyvtárból kiszolgálva is működjön. */
+const asset = (path) => new URL(path, document.baseURI).href;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
+/* A pdf.js ES-modul, ezért csak akkor töltjük be, amikor tényleg PDF
+   érkezik. Így egy hiányzó vagy elérhetetlen pdf.js nem bénítja meg az
+   egész oldalt – a képek felismerése ilyenkor is működik. */
+let pdfjsPromise = null;
+
+function loadPdfjs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import(asset('vendor/pdfjs/pdf.min.mjs')).then((lib) => {
+      lib.GlobalWorkerOptions.workerSrc = asset('vendor/pdfjs/pdf.worker.min.mjs');
+      return lib;
+    });
+  }
+  return pdfjsPromise;
+}
 
 const PDFJS_ASSETS = {
-  cMapUrl: new URL('../vendor/pdfjs/cmaps/', import.meta.url).href,
+  get cMapUrl() { return asset('vendor/pdfjs/cmaps/'); },
   cMapPacked: true,
-  standardFontDataUrl: new URL('../vendor/pdfjs/standard_fonts/', import.meta.url).href,
+  get standardFontDataUrl() { return asset('vendor/pdfjs/standard_fonts/'); },
 };
 
 const TESSERACT_PATHS = {
-  workerPath: 'vendor/tesseract/worker.min.js',
-  corePath: 'vendor/tesseract/',
-  langPath: 'vendor/tessdata',
+  get workerPath() { return asset('vendor/tesseract/worker.min.js'); },
+  get corePath() { return asset('vendor/tesseract/'); },
+  get langPath() { return asset('vendor/tessdata'); },
 };
 
 /* A felismerésnél a Tesseract legfeljebb ekkora oldalt kap; e fölött
@@ -53,6 +68,7 @@ const el = {
   fileInput: $('fileInput'),
   fileList: $('fileList'),
   emptyHint: $('emptyHint'),
+  pasteBtn: $('pasteBtn'),
   lang: $('langSelect'),
   psm: $('psmSelect'),
   dpi: $('dpiSelect'),
@@ -99,6 +115,7 @@ const state = {
   worker: null,
   workerLang: null,
   nextId: 1,
+  pasteCount: 1,
 };
 
 /* ------------------------------------------------------------------ *
@@ -108,7 +125,12 @@ const state = {
 const isPdf = (file) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 const isImage = (file) => file.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif|tiff?|pnm)$/i.test(file.name);
 
-function addFiles(list) {
+function addFiles(list, addedMessage = null) {
+  if (state.running) {
+    setStatus('Feldolgozás közben nem lehet új fájlt hozzáadni. Várd meg a végét, vagy szakítsd meg.', 'warn');
+    return 0;
+  }
+
   const beforeCount = state.files.length;
   let skipped = 0;
 
@@ -129,10 +151,93 @@ function addFiles(list) {
 
   renderFiles();
 
+  const added = state.files.length - beforeCount;
+
   if (skipped > 0) {
     setStatus(`${skipped} fájl kimaradt (nem támogatott formátum vagy már a listán van).`, 'warn');
-  } else if (state.files.length > beforeCount) {
+  } else if (added > 0 && addedMessage) {
+    setStatus(addedMessage(added), 'ok');
+  } else if (added > 0) {
     hideStatus();
+  }
+
+  return added;
+}
+
+/* ------------------------------------------------------------------ *
+ * Beillesztés a vágólapról
+ * ------------------------------------------------------------------ */
+
+/** A vágólapról érkező képek neve üres vagy általános ("image.png"),
+ *  ezért sorszámozott, beszédes nevet adunk nekik. */
+function nameClipboardImage(blob) {
+  const generic = !blob.name || /^(image|kép)\.\w+$/i.test(blob.name);
+  if (!generic) return blob;
+  const ext = ((blob.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg');
+  return new File([blob], `vagolap-${state.pasteCount++}.${ext}`, {
+    type: blob.type || 'image/png',
+    lastModified: Date.now(),
+  });
+}
+
+const pasteMessage = (n) => (n === 1
+  ? 'Kép beillesztve a vágólapról.'
+  : `${n} kép beillesztve a vágólapról.`);
+
+/** Ctrl+V az oldalon: képernyőkép vagy másolt fájl beillesztése. */
+function handlePaste(event) {
+  const target = event.target;
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) return;
+
+  const data = event.clipboardData;
+  if (!data) return;
+
+  const collected = [];
+
+  for (const file of data.files || []) {
+    if (isPdf(file)) collected.push(file);
+    else if (isImage(file)) collected.push(nameClipboardImage(file));
+  }
+
+  if (collected.length === 0) {
+    for (const item of data.items || []) {
+      if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+      const blob = item.getAsFile();
+      if (blob) collected.push(nameClipboardImage(blob));
+    }
+  }
+
+  if (collected.length === 0) return;
+
+  event.preventDefault();
+  addFiles(collected, pasteMessage);
+}
+
+/** A "Beillesztés vágólapról" gomb – ott is működik, ahol a Ctrl+V
+ *  nem jut el az oldalig (a böngésző engedélyt kérhet rá). */
+async function pasteFromClipboard() {
+  if (!navigator.clipboard || !navigator.clipboard.read) {
+    setStatus('Ez a böngésző nem engedi a vágólap kiolvasását. Használd a Ctrl+V billentyűt.', 'warn');
+    return;
+  }
+
+  try {
+    const collected = [];
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith('image/')) || item.types.find((t) => t === 'application/pdf');
+      if (!type) continue;
+      const blob = await item.getType(type);
+      collected.push(nameClipboardImage(new File([blob], '', { type })));
+    }
+
+    if (collected.length === 0) {
+      setStatus('A vágólapon nincs kép. Készíts képernyőképet, majd próbáld újra.', 'warn');
+      return;
+    }
+
+    addFiles(collected, pasteMessage);
+  } catch {
+    setStatus('A vágólap olvasásához a böngésző engedélye kell. Engedélyezd, vagy használd a Ctrl+V billentyűt.', 'warn');
   }
 }
 
@@ -561,6 +666,7 @@ async function prepareImageInput(file, opts) {
 async function processPdf(file, opts, onProgress) {
   onProgress(0.02, 'PDF megnyitása');
 
+  const pdfjsLib = await loadPdfjs();
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer), ...PDFJS_ASSETS }).promise;
   const pageCount = pdf.numPages;
@@ -1063,9 +1169,12 @@ function downloadMarkdown(text, fileName) {
  * Eseménykezelők
  * ------------------------------------------------------------------ */
 
-el.dropzone.addEventListener('click', () => el.fileInput.click());
-el.dropzone.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.fileInput.click(); }
+/* A "tallózz" felirat <label>, azt a böngésző maga kezeli – csak a
+   terület többi részére teszünk kattintáskezelőt, hogy a fájlválasztó
+   ne nyíljon meg kétszer. */
+el.dropzone.addEventListener('click', (e) => {
+  if (e.target.closest('label')) return;
+  el.fileInput.click();
 });
 
 el.fileInput.addEventListener('change', () => {
@@ -1090,6 +1199,9 @@ el.dropzone.addEventListener('drop', (e) => {
 });
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
+
+document.addEventListener('paste', handlePaste);
+el.pasteBtn.addEventListener('click', pasteFromClipboard);
 
 el.startBtn.addEventListener('click', run);
 
@@ -1164,9 +1276,9 @@ window.addEventListener('beforeunload', (e) => {
 /* A böngésző biztonsági szabályai miatt a WebAssembly-motor és a nyelvi
    fájlok nem tölthetők be közvetlenül a fájlrendszerről. */
 function checkEnvironment() {
-  if (location.protocol === 'file:') {
-    setStatus('Ez az oldal helyi webkiszolgálón keresztül működik. Indítsd a projekt könyvtárában: '
-      + 'python3 -m http.server 8080 – majd nyisd meg: http://localhost:8080', 'err');
+  /* A hibát az index.html elején futó apró szkript is észlelhette. */
+  if (window.__ocrHiba) {
+    setStatus(window.__ocrHiba, 'err');
     state.blocked = true;
     renderFiles();
     return;

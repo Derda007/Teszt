@@ -39,6 +39,10 @@
 
 * { box-sizing: border-box; }
 
+/* A saját display-értékek (pl. a .btn inline-block) egyébként felülírnák
+   a böngésző [hidden] szabályát. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -137,7 +141,36 @@ body {
 .dropzone__icon { font-size: 1.6rem; color: var(--accent); }
 .dropzone__main { margin: .4rem 0 .2rem; font-weight: 600; }
 .dropzone__hint { margin: 0; font-size: .82rem; color: var(--text-soft); }
-.link { color: var(--accent); text-decoration: underline; }
+.dropzone__hint + .dropzone__hint { margin-top: .25rem; }
+.link { color: var(--accent); text-decoration: underline; cursor: pointer; }
+
+kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .78em;
+  padding: .08rem .32rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Az űrlapmező látszólag rejtett, de fókuszálható marad, így a hozzá
+   tartozó <label> JavaScript nélkül is megnyitja a fájlválasztót. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dropzone:focus-within { border-color: var(--accent); background: var(--accent-bg); }
 
 /* ---------- fájllista ---------- */
 
@@ -218,6 +251,7 @@ select:focus-visible, .btn:focus-visible, .tab:focus-visible, textarea:focus-vis
 .actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .4rem; }
 
 .btn {
+  display: inline-block;
   padding: .58rem 1.05rem;
   border-radius: 10px;
   border: 1px solid var(--border);

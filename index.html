@@ -7,6 +7,25 @@
   <meta name="description" content="Fotókból és PDF-ekből nyer ki szöveget OCR segítségével, majd Markdown fájlként menti. Teljesen a böngészőben fut, mesterséges intelligencia és feltöltés nélkül.">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+
+  <script>
+    /* Ez a szkript szándékosan a legegyszerűbb formában fut le, még az
+       alkalmazás előtt: ha bármi nem töltődik be, legyen mit kiírni. */
+    window.__ocrHiba = null;
+    if (location.protocol === 'file:') {
+      window.__ocrHiba = 'Az oldalt közvetlenül a fájlrendszerről nyitottad meg. A böngésző '
+        + 'biztonsági szabályai miatt így nem tölthető be az OCR motor. Indíts egy helyi '
+        + 'kiszolgálót a projekt könyvtárában: python3 -m http.server 8080 – majd nyisd meg '
+        + 'a http://localhost:8080 címet.';
+    }
+    window.addEventListener('error', function (e) {
+      if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+        window.__ocrHiba = 'Nem sikerült betölteni: ' + (e.target.src || e.target.href)
+          + ' – ellenőrizd, hogy a vendor/ könyvtár a helyén van-e.';
+      }
+    }, true);
+  </script>
+
   <script src="vendor/tesseract/tesseract.min.js"></script>
 </head>
 <body>
@@ -32,12 +51,18 @@
   <section class="card" aria-labelledby="cim-fajlok">
     <h2 id="cim-fajlok" class="card__title"><span class="step">1</span> Fájlok kiválasztása</h2>
 
-    <div id="dropzone" class="dropzone" tabindex="0" role="button"
-         aria-label="Fájlok kiválasztása: kattints ide, vagy húzd ide a fájlokat">
+    <div id="dropzone" class="dropzone">
       <div class="dropzone__icon" aria-hidden="true">⬆</div>
-      <p class="dropzone__main">Húzd ide a fájlokat, vagy <span class="link">tallózz</span></p>
+      <p class="dropzone__main">Húzd ide a fájlokat, vagy <label for="fileInput" class="link">tallózz</label></p>
       <p class="dropzone__hint">JPG · PNG · WEBP · BMP · GIF · TIFF · PDF — több fájl is megadható</p>
-      <input id="fileInput" type="file" multiple accept="image/*,application/pdf,.pdf,.tif,.tiff" hidden>
+      <p class="dropzone__hint">Képernyőképet <kbd>Ctrl</kbd>+<kbd>V</kbd> billentyűvel is beilleszthetsz</p>
+      <input id="fileInput" type="file" multiple accept="image/*,application/pdf,.pdf,.tif,.tiff"
+             class="visually-hidden" aria-label="Fájlok kiválasztása">
+    </div>
+
+    <div class="actions">
+      <label for="fileInput" class="btn">Fájlok tallózása</label>
+      <button id="pasteBtn" class="btn" type="button">Beillesztés vágólapról</button>
     </div>
 
     <ul id="fileList" class="filelist" aria-live="polite"></ul>
@@ -177,6 +202,7 @@
       <li><strong>Offline is működik.</strong> A motor, a nyelvi adatok és a PDF-olvasó az oldal mellett vannak, külső szolgáltatás nem kell hozzá.</li>
       <li><strong>Jó minőségű beolvasás = jó eredmény.</strong> Egyenes, éles, jól megvilágított kép, legalább 200–300 DPI. Ferde vagy homályos fotónál az OCR is hibázni fog.</li>
       <li><strong>Az eredmény szerkeszthető.</strong> Az OCR sosem tökéletes; a Markdown forrás nézetben javíthatod, mielőtt letöltöd.</li>
+      <li><strong>Képernyőkép egy mozdulattal.</strong> Készíts kivágást (Windows: <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, macOS: <kbd>Cmd</kbd>+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd>), majd nyomj <kbd>Ctrl</kbd>+<kbd>V</kbd>-t ezen az oldalon – a kép azonnal a listába kerül.</li>
     </ul>
   </section>
 
@@ -186,6 +212,6 @@
   <p>Tesseract.js (Apache-2.0) &amp; pdf.js (Apache-2.0) felhasználásával. Minden feldolgozás helyben történik.</p>
 </footer>
 
-<script type="module" src="assets/app.js"></script>
+<script src="assets/app.js" defer></script>
 </body>
 </html>
