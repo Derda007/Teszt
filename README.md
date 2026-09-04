@@ -73,9 +73,32 @@ a böngésződben történik – a fájljaid akkor sem töltődnek fel sehová.
    lenyíló részben képjavítás és Markdown-formázási kapcsolók.
 3. **Szöveg kinyerése** – a folyamat közben látszik, hol tart, és bármikor
    megszakítható.
-4. **Eredmény** – előnézet vagy szerkeszthető Markdown forrás, majd letöltés
-   `.md` fájlként (több fájl esetén egyben vagy külön-külön), illetve másolás
-   vágólapra.
+4. **Eredmény** – előnézet vagy szerkeszthető Markdown forrás, majd mentés
+   (lásd lentebb) vagy másolás vágólapra.
+
+### A mentés három módja
+
+| Mód | Mit ad | Mikor jó |
+| --- | --- | --- |
+| **Letöltés egy .md fájlba** | minden dokumentum egyetlen fájlban, `---` elválasztókkal | ha együtt akarod olvasni vagy tovább szerkeszteni |
+| **Letöltés ZIP-be (fájlonként)** | dokumentumonként külön `.md`, egyetlen ZIP-ben, a **mappaszerkezet megtartásával** | sok fájlnál ez a kényelmes út |
+| **Letöltés külön fájlokba** | fájlonként egy-egy letöltés | néhány fájlnál, ha nem akarsz kicsomagolni |
+
+A ZIP a forrás mappaszerkezetét tükrözi: a `jelentesek/2024/marcius.docx`
+eredménye a ZIP-ben `jelentesek/2024/marcius.md` lesz. Ha két különböző
+forrásból ugyanaz a név jönne ki (pl. `jelentes.docx` és `jelentes.xlsx`), a
+második sorszámot kap (`jelentes-2.md`), hogy semmi ne vesszen el. Az ékezetes
+mappa- és fájlnevek megmaradnak.
+
+**Húsz fájl fölött a külön letöltés gombja eltűnik**, mert a böngészők ennyi
+egyidejű letöltést már blokkolnak – ott a ZIP marad.
+
+> A **Letöltés egy .md fájlba** és a **Másolás** mindig a forrásnézetben látható,
+> akár átírt szöveget menti. A **ZIP** és a **külön fájlok** az eredeti,
+> dokumentumonként szétválasztott eredményt tartalmazzák.
+
+RAR-t az alkalmazás nem tud készíteni: az zárt formátum, nincs hozzá szabadon
+használható tömörítő. A ZIP-et minden mai rendszer natívan kicsomagolja.
 
 ### Képernyőkép beillesztése
 
@@ -135,8 +158,9 @@ sem tud adatot kiküldeni.
 * **Galéria és fájlok.** Bármelyik korábbi fotó, PDF, Word- vagy Excel-fájl is
   választható, egyszerre több is. (Egész mappát a telefon fájlválasztója nem ad
   át, ez a lehetőség csak a böngészős változatban van meg.)
-* **Mentés.** A Markdown a **Letöltések** mappába kerül (Android 10-től),
-  régebbi rendszereken az alkalmazás mappájába, és rögtön meg is osztható.
+* **Mentés.** A Markdown – és több fájlnál a ZIP – a **Letöltések** mappába
+  kerül (Android 10-től), régebbi rendszereken az alkalmazás mappájába, és
+  rögtön meg is osztható.
 * A telefon sötét/világos témáját átveszi.
 
 ### Az APK letöltése

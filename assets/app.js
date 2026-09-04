@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -110,6 +110,7 @@ const el = {
   sourcePane: $('sourcePane'),
   resultMeta: $('resultMeta'),
   downloadBtn: $('downloadBtn'),
+  downloadZipBtn: $('downloadZipBtn'),
   downloadEachBtn: $('downloadEachBtn'),
   copyBtn: $('copyBtn'),
   appVersion: $('appVersion'),
@@ -409,6 +410,9 @@ function renderFiles() {
   }
 
   const has = state.files.length > 0;
+  /* Tíznél több fájlnál a lista saját görgetést kap, hogy a beállítások
+     és a gombok elérhető közelségben maradjanak. */
+  el.fileList.classList.toggle('is-long', state.files.length > 10);
   el.emptyHint.hidden = has;
   el.startBtn.disabled = !has || state.running || state.blocked;
   el.clearBtn.disabled = !has || state.running;
@@ -1295,10 +1299,16 @@ function combinedMarkdown() {
   return state.results.map((r) => r.markdown.trim()).join('\n\n---\n\n') + '\n';
 }
 
+/* Ennél több fájlt a böngészők már nem engednek egyenként letölteni:
+   ilyenkor a ZIP az egyetlen járható út. */
+const KULON_LETOLTES_HATAR = 20;
+
 function showResults() {
   el.sourcePane.value = combinedMarkdown();
   el.resultCard.hidden = false;
-  el.downloadEachBtn.hidden = state.results.length < 2;
+  el.downloadZipBtn.hidden = state.results.length < 2;
+  el.downloadEachBtn.hidden = state.results.length < 2
+    || state.results.length > KULON_LETOLTES_HATAR;
   el.resultMeta.textContent = state.results.length === 1
     ? `${el.sourcePane.value.length.toLocaleString('hu-HU')} karakter`
     : `${state.results.length} dokumentum · ${el.sourcePane.value.length.toLocaleString('hu-HU')} karakter`;
@@ -1399,6 +1409,83 @@ function safeFileName(name) {
   return (baseName(name).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'ocr-szoveg') + '.md';
 }
 
+/* ------------------------------------------------------------------ *
+ * Mentés ZIP-be
+ * ------------------------------------------------------------------ */
+
+/** Egy útvonalrész megtisztítása a fájlrendszerekben tiltott jelektől. */
+function safeSegment(resz) {
+  return resz.replace(/[\\/:*?"<>|]+/g, '-').replace(/\.+$/, '').trim();
+}
+
+/**
+ * A ZIP-en belüli útvonal. A mappaszerkezet megmarad, csak a kiterjesztés
+ * lesz .md – így a kicsomagolt eredmény ugyanúgy néz ki, mint a forrás.
+ */
+function zipPath(label, foglaltak) {
+  const reszek = String(label).replace(/\\/g, '/').split('/').map(safeSegment).filter(Boolean);
+  if (reszek.length === 0) reszek.push('ocr-szoveg');
+
+  const utolso = reszek.pop().replace(/\.[^.]*$/, '') || 'ocr-szoveg';
+  const mappa = reszek.length ? `${reszek.join('/')}/` : '';
+
+  /* Két különböző forrásból (pl. jelentes.doc és jelentes.pdf) ugyanaz a
+     név lenne: a másodiktól sorszámot kap, hogy ne írja felül az elsőt. */
+  let nev = `${mappa}${utolso}.md`;
+  let n = 2;
+  while (foglaltak.has(nev.toLowerCase())) {
+    nev = `${mappa}${utolso}-${n}.md`;
+    n += 1;
+  }
+  foglaltak.add(nev.toLowerCase());
+  return nev;
+}
+
+function buildZip(results) {
+  if (typeof fflate === 'undefined' || typeof fflate.zipSync !== 'function') {
+    throw new Error('a ZIP-író (vendor/fflate) nem töltődött be');
+  }
+
+  const kodolo = new TextEncoder();
+  const foglaltak = new Set();
+  const tartalom = {};
+
+  for (const r of results) {
+    tartalom[zipPath(r.name, foglaltak)] = kodolo.encode(r.markdown);
+  }
+
+  return fflate.zipSync(tartalom, { level: 6 });
+}
+
+function zipFileName() {
+  const most = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `ocr-szoveg-${most.getFullYear()}${p(most.getMonth() + 1)}${p(most.getDate())}`
+    + `-${p(most.getHours())}${p(most.getMinutes())}.zip`;
+}
+
+function downloadZip() {
+  if (state.results.length === 0) return;
+
+  setStatus(`ZIP készítése ${state.results.length} fájlból…`, 'ok');
+
+  /* A tömörítés röviden lefoglalja a felületet, ezért csak a fenti
+     üzenet kirajzolása után kezdünk hozzá. */
+  setTimeout(() => {
+    try {
+      const bajtok = buildZip(state.results);
+      downloadBinary(bajtok, zipFileName(), 'application/zip');
+      const meret = bajtok.length < 1024 * 1024
+        ? `${Math.max(1, Math.round(bajtok.length / 1024))} kB`
+        : `${(bajtok.length / 1024 / 1024).toFixed(1)} MB`;
+      setStatus(`ZIP elkészült: ${state.results.length} fájl, ${meret}.`, 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus(`A ZIP készítése nem sikerült: ${err && err.message ? err.message : 'ismeretlen hiba'}`, 'err');
+    }
+  }, 30);
+}
+
 function downloadMarkdown(text, fileName) {
   /* Az Android-alkalmazásban a natív mentést használjuk: a WebView a
      letöltési hivatkozásokat (főleg a blob: címeket) nem kezeli
@@ -1412,7 +1499,24 @@ function downloadMarkdown(text, fileName) {
     }
   }
 
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  mentesLetoltessel(new Blob([text], { type: 'text/markdown;charset=utf-8' }), fileName);
+}
+
+/** Bináris tartalom (ZIP) mentése. */
+function downloadBinary(bajtok, fileName, mime) {
+  if (window.OcrAndroid && typeof window.OcrAndroid.mentesBinaris === 'function') {
+    try {
+      window.OcrAndroid.mentesBinaris(fileName, base64(bajtok), mime);
+      return;
+    } catch (err) {
+      console.warn('A natív mentés nem sikerült, marad a böngészős út.', err);
+    }
+  }
+
+  mentesLetoltessel(new Blob([bajtok], { type: mime }), fileName);
+}
+
+function mentesLetoltessel(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -1421,6 +1525,16 @@ function downloadMarkdown(text, fileName) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Bájtok base64-be, adagolva – a nagy tömbök szétfeszítenék a hívást. */
+function base64(bajtok) {
+  let nyers = '';
+  const adag = 0x8000;
+  for (let i = 0; i < bajtok.length; i += adag) {
+    nyers += String.fromCharCode.apply(null, bajtok.subarray(i, i + adag));
+  }
+  return btoa(nyers);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1539,6 +1653,8 @@ el.downloadBtn.addEventListener('click', () => {
   const name = state.results.length === 1 ? safeFileName(state.results[0].name) : 'ocr-szoveg.md';
   downloadMarkdown(el.sourcePane.value, name);
 });
+
+el.downloadZipBtn.addEventListener('click', downloadZip);
 
 el.downloadEachBtn.addEventListener('click', () => {
   state.results.forEach((r, i) => {

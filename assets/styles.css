@@ -199,6 +199,16 @@ kbd {
 
 .filelist { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .55rem; }
 
+/* Sok fájlnál a lista ne nyújtsa el az egész oldalt: saját görgetést kap. */
+.filelist.is-long {
+  max-height: 26rem;
+  overflow-y: auto;
+  padding-right: .35rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: .5rem;
+}
+
 .fileitem {
   display: grid;
   grid-template-columns: auto 1fr auto;
