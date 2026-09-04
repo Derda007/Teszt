@@ -316,7 +316,11 @@
     if (typeof fflate === 'undefined' || typeof fflate.unzipSync !== 'function') {
       throw new Error('a ZIP-olvasó (vendor/fflate) nem töltődött be');
     }
-    return fflate.unzipSync(bajtok);
+    try {
+      return fflate.unzipSync(bajtok);
+    } catch (e) {
+      throw new Error('a fájl sérült vagy nem nyitható meg');
+    }
   }
 
   const UTF8 = new TextDecoder('utf-8');
@@ -368,8 +372,7 @@
    * DOCX
    * ------------------------------------------------------------------ */
 
-  function olvasDocx(bajtok) {
-    const csomag = kicsomagol(bajtok);
+  function olvasDocx(csomag) {
     const doc = xmlDokumentum(csomag, 'word/document.xml');
     if (!doc) throw new Error('hiányzik a word/document.xml – lehet, hogy nem Word-fájl');
 
@@ -606,9 +609,7 @@
    * XLSX
    * ------------------------------------------------------------------ */
 
-  function olvasXlsx(bajtok) {
-    const csomag = kicsomagol(bajtok);
-
+  function olvasXlsx(csomag) {
     const munkafuzet = xmlDokumentum(csomag, 'xl/workbook.xml');
     if (!munkafuzet) throw new Error('hiányzik az xl/workbook.xml – lehet, hogy nem Excel-fájl');
 
@@ -807,8 +808,7 @@
     0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x9d, 0x017e, 0x0178,
   ];
 
-  function olvasDoc(bajtok) {
-    const ole = olvasOle(bajtok);
+  function olvasDoc(ole) {
     const fo = ole.folyam('WordDocument');
     if (!fo) throw new Error('hiányzik a WordDocument adatfolyam – lehet, hogy nem Word-fájl');
 
@@ -1007,8 +1007,7 @@
     RK: 0x027e, MULRK: 0x00bd, BOOLERR: 0x0205, STRING: 0x0207, BOF: 0x0809,
   };
 
-  function olvasXls(bajtok) {
-    const ole = olvasOle(bajtok);
+  function olvasXls(ole) {
     const konyv = ole.folyam('Workbook') || ole.folyam('Book');
     if (!konyv) throw new Error('hiányzik a Workbook adatfolyam – lehet, hogy nem Excel-fájl');
 
@@ -1310,20 +1309,47 @@
    * Nyilvános felület
    * ------------------------------------------------------------------ */
 
+  /**
+   * A tárolót a fájl tartalma alapján ismerjük fel, nem a kiterjesztéséből:
+   * az átnevezett vagy rossz kiterjesztéssel mentett fájl gyakori.
+   */
+  function tarolo(bajtok) {
+    if (bajtok.length >= 4
+        && bajtok[0] === 0x50 && bajtok[1] === 0x4b
+        && (bajtok[2] === 0x03 || bajtok[2] === 0x05 || bajtok[2] === 0x07)) {
+      return 'zip';
+    }
+    for (let i = 0; i < 8; i += 1) {
+      if (bajtok[i] !== OLE_ALAIRAS[i]) return null;
+    }
+    return 'ole';
+  }
+
   async function feldolgoz(file) {
-    const f = fajta(file.name);
-    if (!f) throw new Error('nem támogatott formátum');
+    if (!fajta(file.name)) throw new Error('nem támogatott formátum');
     if (file.size > MAX_MERET) {
       throw new Error(`túl nagy fájl (${Math.round(file.size / 1024 / 1024)} MB)`);
     }
 
     const bajtok = new Uint8Array(await file.arrayBuffer());
+    const fajtaja = tarolo(bajtok);
 
+    let f;
     let eredmeny;
-    if (f === 'docx') eredmeny = olvasDocx(bajtok);
-    else if (f === 'xlsx') eredmeny = olvasXlsx(bajtok);
-    else if (f === 'doc') eredmeny = olvasDoc(bajtok);
-    else eredmeny = olvasXls(bajtok);
+
+    if (fajtaja === 'zip') {
+      const csomag = kicsomagol(bajtok);
+      if (csomag['word/document.xml']) { f = 'docx'; eredmeny = olvasDocx(csomag); }
+      else if (csomag['xl/workbook.xml']) { f = 'xlsx'; eredmeny = olvasXlsx(csomag); }
+      else throw new Error('a fájl nem Word- vagy Excel-dokumentum');
+    } else if (fajtaja === 'ole') {
+      const ole = olvasOle(bajtok);
+      if (ole.folyam('WordDocument')) { f = 'doc'; eredmeny = olvasDoc(ole); }
+      else if (ole.folyam('Workbook') || ole.folyam('Book')) { f = 'xls'; eredmeny = olvasXls(ole); }
+      else throw new Error('a fájl nem Word- vagy Excel-dokumentum');
+    } else {
+      throw new Error('a fájl sérült, vagy nem Word- illetve Excel-dokumentum');
+    }
 
     return Object.assign({ fajta: f, fajtaNev: FAJTA_NEVEK[f] }, eredmeny);
   }
