@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -77,6 +77,7 @@ const $ = (id) => document.getElementById(id);
 const el = {
   dropzone: $('dropzone'),
   fileInput: $('fileInput'),
+  folderInput: $('folderInput'),
   fileList: $('fileList'),
   emptyHint: $('emptyHint'),
   pasteBtn: $('pasteBtn'),
@@ -138,6 +139,32 @@ const state = {
 const isPdf = (file) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
 const isImage = (file) => file.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif|tiff?|pnm)$/i.test(file.name);
 
+/** Word- vagy Excel-fájl? A választ az iroda.js modul adja. */
+const officeKind = (file) => (window.Iroda ? window.Iroda.fajta(file.name) : null);
+
+const ICONS = {
+  pdf: '📕', image: '🖼️', docx: '📘', doc: '📘', xlsx: '📗', xls: '📗',
+};
+
+/** @return a feldolgozás fajtája, vagy null, ha nem tudunk vele mit kezdeni. */
+function fileKind(file) {
+  if (isPdf(file)) return 'pdf';
+  const office = officeKind(file);
+  if (office) return office;
+  if (isImage(file)) return 'image';
+  return null;
+}
+
+/** A listában és a Markdown címében a mappán belüli útvonal jelenik meg. */
+function fileLabel(file) {
+  return file.webkitRelativePath || file.__utvonal || file.name;
+}
+
+/** Rejtett fájlok és mappák (.git, .DS_Store és társaik) kimaradnak. */
+function rejtett(label) {
+  return label.split('/').some((resz) => resz.startsWith('.'));
+}
+
 function addFiles(list, addedMessage = null) {
   if (state.running) {
     setStatus('Feldolgozás közben nem lehet új fájlt hozzáadni. Várd meg a végét, vagy szakítsd meg.', 'warn');
@@ -148,33 +175,121 @@ function addFiles(list, addedMessage = null) {
   let skipped = 0;
 
   for (const file of list) {
-    if (!isPdf(file) && !isImage(file)) { skipped += 1; continue; }
-    const dup = state.files.some((f) => f.file.name === file.name && f.file.size === file.size);
+    const label = fileLabel(file);
+    if (rejtett(label)) { skipped += 1; continue; }
+
+    const kind = fileKind(file);
+    if (!kind) { skipped += 1; continue; }
+
+    const dup = state.files.some((f) => f.label === label && f.file.size === file.size);
     if (dup) { skipped += 1; continue; }
 
     state.files.push({
       id: state.nextId++,
       file,
-      kind: isPdf(file) ? 'pdf' : 'image',
+      label,
+      kind,
       status: 'varakozik',
       note: formatSize(file.size),
       noteClass: '',
     });
   }
 
+  /* Mappából érkező fájloknál a sorrend legyen kiszámítható. */
+  state.files.sort((a, b) => a.label.localeCompare(b.label, 'hu', { numeric: true }));
+
   renderFiles();
 
   const added = state.files.length - beforeCount;
 
-  if (skipped > 0) {
-    setStatus(`${skipped} fájl kimaradt (nem támogatott formátum vagy már a listán van).`, 'warn');
-  } else if (added > 0 && addedMessage) {
-    setStatus(addedMessage(added), 'ok');
+  const kimaradt = skipped ? ` ${skipped} fájl kimaradt (nem támogatott formátum vagy már a listán van).` : '';
+
+  if (added > 0 && addedMessage) {
+    setStatus(addedMessage(added) + kimaradt, skipped ? 'warn' : 'ok');
+  } else if (skipped > 0) {
+    setStatus(kimaradt.trim(), 'warn');
   } else if (added > 0) {
     hideStatus();
   }
 
   return added;
+}
+
+/* ------------------------------------------------------------------ *
+ * Mappák befogadása
+ * ------------------------------------------------------------------ */
+
+/** Ennyi fájlnál többet nem veszünk át egy mappából, kérdezés nélkül. */
+const MAPPA_FIGYELMEZTETES = 200;
+
+const mappaMessage = (n) => (n === 1
+  ? '1 feldolgozható fájl a mappából.'
+  : `${n} feldolgozható fájl a mappából.`);
+
+/**
+ * Ráhúzott mappa bejárása. A böngésző a fájlokat csak ezen a régi, de
+ * mindenhol működő felületen adja ki rekurzívan.
+ */
+async function gyujtsBejegyzesekbol(items) {
+  const gyokerek = [];
+  for (const item of items) {
+    const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+    if (entry) gyokerek.push(entry);
+  }
+  if (gyokerek.length === 0) return null;
+
+  const talalt = [];
+  let mappaVolt = false;
+
+  const beolvas = (fileEntry, utvonal) => new Promise((resolve) => {
+    fileEntry.file((f) => {
+      /* A File neve csak a fájlnév; az útvonalat külön visszük tovább. */
+      try { f.__utvonal = utvonal; } catch { /* nem írható, marad a név */ }
+      talalt.push(f);
+      resolve();
+    }, resolve);
+  });
+
+  const olvasMappa = (dirEntry, utvonal) => new Promise((resolve) => {
+    mappaVolt = true;
+    const reader = dirEntry.createReader();
+    const teendok = [];
+
+    const kovetkezoAdag = () => {
+      reader.readEntries(async (bejegyzesek) => {
+        if (bejegyzesek.length === 0) {
+          await Promise.all(teendok);
+          resolve();
+          return;
+        }
+        for (const b of bejegyzesek) {
+          if (b.name.startsWith('.')) continue;          // rejtett elem
+          teendok.push(bejar(b, `${utvonal}/${b.name}`));
+        }
+        kovetkezoAdag();
+      }, resolve);
+    };
+    kovetkezoAdag();
+  });
+
+  const bejar = (entry, utvonal) => {
+    if (talalt.length > 5000) return Promise.resolve();
+    if (entry.isFile) return beolvas(entry, utvonal);
+    if (entry.isDirectory) return olvasMappa(entry, utvonal);
+    return Promise.resolve();
+  };
+
+  await Promise.all(gyokerek.map((e) => bejar(e, e.name)));
+  return { fajlok: talalt, mappaVolt };
+}
+
+function mappaFigyelmeztetes(osszes, felvett) {
+  if (osszes > MAPPA_FIGYELMEZTETES) {
+    setStatus(`${felvett} fájl került a listára (${osszes} elemből). Ennyi fájl feldolgozása `
+      + 'sokáig tarthat – a Megszakítás gombbal bármikor leállíthatod.', 'warn');
+    return true;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------ *
@@ -268,13 +383,13 @@ function renderFiles() {
 
     const icon = document.createElement('span');
     icon.className = 'fileitem__icon';
-    icon.textContent = item.kind === 'pdf' ? '📕' : '🖼️';
+    icon.textContent = ICONS[item.kind] || '📄';
     icon.setAttribute('aria-hidden', 'true');
 
     const body = document.createElement('div');
     const name = document.createElement('div');
     name.className = 'fileitem__name';
-    name.textContent = item.file.name;
+    name.textContent = item.label;
     const meta = document.createElement('div');
     meta.className = `fileitem__meta${item.noteClass ? ` ${item.noteClass}` : ''}`;
     meta.textContent = item.note;
@@ -284,7 +399,7 @@ function renderFiles() {
     del.className = 'iconbtn';
     del.type = 'button';
     del.title = 'Eltávolítás a listáról';
-    del.setAttribute('aria-label', `${item.file.name} eltávolítása`);
+    del.setAttribute('aria-label', `${item.label} eltávolítása`);
     del.textContent = '✕';
     del.disabled = state.running;
     del.addEventListener('click', () => removeFile(item.id));
@@ -599,18 +714,19 @@ async function run() {
     for (const item of state.files) {
       if (state.cancelled) break;
 
-      const label = `${done + 1}/${total} – ${item.file.name}`;
+      const label = `${done + 1}/${total} – ${item.label}`;
       const fileProgress = (frac, text) => setProgress((done + frac) / total, `${label} · ${text}`);
 
       setNote(item, 'feldolgozás alatt…');
       try {
-        const result = item.kind === 'pdf'
-          ? await processPdf(item.file, opts, fileProgress)
-          : await processImage(item.file, opts, fileProgress);
+        let result;
+        if (item.kind === 'pdf') result = await processPdf(item, opts, fileProgress);
+        else if (item.kind === 'image') result = await processImage(item, opts, fileProgress);
+        else result = await processOffice(item, opts, fileProgress);
 
         if (state.cancelled) break;
 
-        state.results.push({ name: item.file.name, markdown: result.markdown });
+        state.results.push({ name: item.label, markdown: result.markdown });
         setNote(item, describeResult(result), result.confidence !== null && result.confidence < 70 ? 'is-warn' : 'is-ok');
       } catch (err) {
         failed += 1;
@@ -643,6 +759,19 @@ async function run() {
 
 function describeResult(result) {
   const parts = [];
+
+  if (result.office) {
+    if (result.munkalapok) {
+      parts.push(result.munkalapok === 1 ? '1 munkalap' : `${result.munkalapok} munkalap`);
+    } else if (result.bekezdesek) {
+      parts.push(`${result.bekezdesek} bekezdés`);
+    }
+    if (result.tablak) parts.push(result.tablak === 1 ? '1 táblázat' : `${result.tablak} táblázat`);
+    parts.push(`${result.chars.toLocaleString('hu-HU')} karakter`);
+    parts.push('beágyazott szövegből');
+    return parts.join(' · ');
+  }
+
   parts.push(result.pages === 1 ? '1 oldal' : `${result.pages} oldal`);
   parts.push(`${result.chars.toLocaleString('hu-HU')} karakter`);
   if (result.confidence !== null) parts.push(`megbízhatóság: ${result.confidence}%`);
@@ -650,7 +779,52 @@ function describeResult(result) {
   return parts.join(' · ');
 }
 
-async function processImage(file, opts, onProgress) {
+/**
+ * Word- és Excel-fájlok: ezekben valódi, gépi szöveg van, ezért nincs OCR.
+ * A szerkezetet (címsorok, felsorolások, táblázatok) az iroda.js olvassa ki.
+ */
+async function processOffice(item, opts, onProgress) {
+  if (!window.Iroda) throw new Error('az Office-olvasó (assets/iroda.js) nem töltődött be');
+
+  onProgress(0.1, `${window.Iroda.fajtaNev(item.kind)} olvasása`);
+  const kiolvasott = await window.Iroda.feldolgoz(item.file);
+
+  if (!kiolvasott.markdown) {
+    throw new Error('a dokumentum nem tartalmaz szöveget');
+  }
+
+  onProgress(0.9, 'Markdown összeállítása');
+
+  const markdown = buildDocument({
+    title: baseName(baseFileName(item.label)),
+    source: item.label,
+    pages: [{ markdown: kiolvasott.markdown, confidence: null, number: 1 }],
+    opts,
+    fromTextLayer: false,
+    officeKind: kiolvasott.fajtaNev,
+  });
+
+  return {
+    markdown,
+    office: true,
+    pages: 1,
+    chars: kiolvasott.markdown.length,
+    confidence: null,
+    fromTextLayer: false,
+    bekezdesek: kiolvasott.bekezdesek || 0,
+    tablak: kiolvasott.tablak || 0,
+    munkalapok: kiolvasott.munkalapok || 0,
+  };
+}
+
+/** Az útvonalból csak a fájlnév. */
+function baseFileName(utvonal) {
+  const darabok = String(utvonal).split('/');
+  return darabok[darabok.length - 1];
+}
+
+async function processImage(item, opts, onProgress) {
+  const file = item.file;
   onProgress(0.05, 'kép előkészítése');
 
   const input = await prepareImageInput(file, opts);
@@ -659,8 +833,8 @@ async function processImage(file, opts, onProgress) {
   onProgress(0.98, 'Markdown összeállítása');
 
   const markdown = buildDocument({
-    title: baseName(file.name),
-    source: file.name,
+    title: baseName(baseFileName(item.label)),
+    source: item.label,
     pages: [page],
     opts,
     fromTextLayer: false,
@@ -697,7 +871,8 @@ async function prepareImageInput(file, opts) {
   return enhance(canvas, opts);
 }
 
-async function processPdf(file, opts, onProgress) {
+async function processPdf(item, opts, onProgress) {
+  const file = item.file;
   onProgress(0.02, 'PDF megnyitása');
 
   const pdfjsLib = await loadPdfjs();
@@ -743,8 +918,8 @@ async function processPdf(file, opts, onProgress) {
   }
 
   const markdown = buildDocument({
-    title: baseName(file.name),
-    source: file.name,
+    title: baseName(baseFileName(item.label)),
+    source: item.label,
     pages,
     opts,
     fromTextLayer: usedTextLayer,
@@ -1027,6 +1202,10 @@ function blockToMarkdown(rawLines, opts, headingLevel = 0) {
  * szöveget daraboljuk üres sorok mentén.
  */
 function pageToMarkdown(page, opts) {
+  /* A Word- és Excel-fájlok kész szerkezetet hoznak: azon nincs mit
+     találgatni, az OCR-heurisztikák csak rontanának rajta. */
+  if (page.markdown) return page.markdown;
+
   const paragraphs = page.paragraphs
     ? page.paragraphs
     : normalizeRaw(page.text || '')
@@ -1044,7 +1223,7 @@ function pageToMarkdown(page, opts) {
   return out.join('\n\n');
 }
 
-function buildDocument({ title, source, pages, opts, fromTextLayer }) {
+function buildDocument({ title, source, pages, opts, fromTextLayer, officeKind = null }) {
   const scored = pages.filter((p) => p.confidence !== null);
   const avg = scored.length ? Math.round(scored.reduce((s, p) => s + p.confidence, 0) / scored.length) : null;
   const now = new Date();
@@ -1066,14 +1245,19 @@ function buildDocument({ title, source, pages, opts, fromTextLayer }) {
 
   parts.push(`# ${title}`);
 
-  const meta = [
-    `Forrás: \`${source}\``,
-    pages.length === 1 ? '1 oldal' : `${pages.length} oldal`,
-    `Nyelv: ${describeLang(opts.lang)}`,
-  ];
-  if (avg !== null) meta.push(`átlagos megbízhatóság: ${avg}%`);
-  if (fromTextLayer) meta.push('részben a PDF beágyazott szövegéből');
-  meta.push(`felismerve: ${formatDateTime(now)}`);
+  const meta = [`Forrás: \`${source}\``];
+
+  if (officeKind) {
+    /* Itt nem volt felismerés: a szöveg magából a dokumentumból jön. */
+    meta.push(officeKind);
+    meta.push(`kiolvasva: ${formatDateTime(now)}`);
+  } else {
+    meta.push(pages.length === 1 ? '1 oldal' : `${pages.length} oldal`);
+    meta.push(`Nyelv: ${describeLang(opts.lang)}`);
+    if (avg !== null) meta.push(`átlagos megbízhatóság: ${avg}%`);
+    if (fromTextLayer) meta.push('részben a PDF beágyazott szövegéből');
+    meta.push(`felismerve: ${formatDateTime(now)}`);
+  }
   parts.push(`*${meta.join(' · ')}*`);
 
   const usePageMarks = pages.length > 1 && opts.pageMarks;
@@ -1133,10 +1317,31 @@ function escapeHtml(s) {
 function inline(s) {
   return escapeHtml(s)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, cim, url) => `<a href="${escapeHtml(url)}" rel="noopener noreferrer">${cim}</a>`)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
-    .replace(/\\([#>|.])/g, '$1')
+    .replace(/\\([\\`*[\]#>|.+-])/g, '$1')
     .replace(/ {2}\n/g, '<br>\n');
+}
+
+/** Markdown-táblázatból HTML. A cellák széli | jeleit levágjuk. */
+function tableToHtml(lines) {
+  const cellak = (sor) => sor
+    .replace(/^\s*\|/, '')
+    .replace(/\|\s*$/, '')
+    /* A \| a cella tartalmához tartozik, nem oszlophatár. */
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim());
+
+  const fej = cellak(lines[0]);
+  const test = lines.slice(2).map(cellak);
+
+  const th = fej.map((c) => `<th>${inline(c)}</th>`).join('');
+  const sorok = test
+    .map((s) => `<tr>${s.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`)
+    .join('');
+
+  return `<div class="tablewrap"><table><thead><tr>${th}</tr></thead><tbody>${sorok}</tbody></table></div>`;
 }
 
 /** Szándékosan minimalista Markdown-megjelenítő az előnézethez. */
@@ -1164,6 +1369,13 @@ function markdownToHtml(md) {
     }
 
     const lines = trimmed.split('\n');
+
+    /* Táblázat: fejléc, majd egy csupa kötőjeles elválasztó sor. */
+    if (lines.length >= 2 && /^\s*\|.*\|\s*$/.test(lines[0]) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[1])) {
+      html.push(tableToHtml(lines));
+      continue;
+    }
+
     if (lines.every((l) => /^-\s+/.test(l))) {
       html.push(`<ul>${lines.map((l) => `<li>${inline(l.replace(/^-\s+/, ''))}</li>`).join('')}</ul>`);
       continue;
@@ -1228,6 +1440,13 @@ el.fileInput.addEventListener('change', () => {
   el.fileInput.value = '';
 });
 
+el.folderInput.addEventListener('change', () => {
+  const osszes = Array.from(el.folderInput.files || []);
+  el.folderInput.value = '';
+  const felvett = addFiles(osszes, mappaMessage);
+  mappaFigyelmeztetes(osszes.length, felvett);
+});
+
 ['dragenter', 'dragover'].forEach((type) => {
   el.dropzone.addEventListener(type, (e) => {
     e.preventDefault();
@@ -1240,8 +1459,31 @@ el.fileInput.addEventListener('change', () => {
     el.dropzone.classList.remove('is-over');
   });
 });
-el.dropzone.addEventListener('drop', (e) => {
-  if (e.dataTransfer?.files?.length) addFiles(Array.from(e.dataTransfer.files));
+el.dropzone.addEventListener('drop', async (e) => {
+  const adat = e.dataTransfer;
+  if (!adat) return;
+
+  /* Mappát csak a bejegyzés-felületen keresztül lehet kibontani; a
+     dataTransfer.files ilyenkor csak magát a mappát tartalmazná. */
+  if (adat.items && adat.items.length) {
+    let gyujtes = null;
+    try {
+      gyujtes = await gyujtsBejegyzesekbol(Array.from(adat.items));
+    } catch (err) {
+      console.warn('A mappa bejárása nem sikerült, marad a sima fájllista.', err);
+    }
+    if (gyujtes && gyujtes.fajlok.length) {
+      const felvett = addFiles(gyujtes.fajlok, gyujtes.mappaVolt ? mappaMessage : null);
+      mappaFigyelmeztetes(gyujtes.fajlok.length, felvett);
+      return;
+    }
+    if (gyujtes && gyujtes.mappaVolt) {
+      setStatus('A mappában nincs feldolgozható fájl.', 'warn');
+      return;
+    }
+  }
+
+  if (adat.files && adat.files.length) addFiles(Array.from(adat.files));
 });
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());

@@ -34,6 +34,11 @@ for LANG in hun eng deu; do
   cp "$NM/@tesseract.js-data/$LANG/4.0.0_best_int/$LANG.traineddata.gz" "$ROOT/vendor/tessdata/"
 done
 
+echo "-> fflate (ZIP-olvasó az Office-fájlokhoz)"
+mkdir -p "$ROOT/vendor/fflate"
+cp "$NM/fflate/umd/index.js" "$ROOT/vendor/fflate/fflate.min.js"
+cp "$NM/fflate/LICENSE" "$ROOT/vendor/fflate/LICENSE.txt" 2>/dev/null || true
+
 echo "-> pdf.js"
 cp "$NM/pdfjs-dist/build/pdf.min.mjs"        "$ROOT/vendor/pdfjs/"
 cp "$NM/pdfjs-dist/build/pdf.worker.min.mjs" "$ROOT/vendor/pdfjs/"

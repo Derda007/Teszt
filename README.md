@@ -1,17 +1,27 @@
 # OCR Szövegkinyerő
 
-Egyoldalas webalkalmazás, amely **fotókból, szkennelt képekből és PDF-ekből OCR
-segítségével kinyeri a szöveget**, majd az eredményt **Markdown (.md) fájlként**
-menti.
+Egyoldalas webalkalmazás, amely **fotókból, szkennelt képekből, PDF-ekből,
+valamint Word- és Excel-fájlokból kinyeri a szöveget**, majd az eredményt
+**Markdown (.md) fájlként** menti. Egyszerre **egész mappákat** is befogad.
+
+| Formátum | Hogyan olvassuk ki |
+| --- | --- |
+| JPG, PNG, WEBP, BMP, GIF, TIFF | OCR (Tesseract) |
+| PDF | ha van benne valódi szöveg, azt; egyébként oldalanként OCR |
+| DOCX, DOC | közvetlenül a dokumentumból – címsorok, felsorolások, táblázatok |
+| XLSX, XLS | közvetlenül a munkafüzetből – munkalaponként egy táblázat |
 
 * **Nincs benne mesterséges intelligencia.** A felismerést a klasszikus
   [Tesseract](https://github.com/tesseract-ocr/tesseract) OCR motor végzi
   (tesseract.js, WebAssembly). Nem hív külső AI-szolgáltatást, nem generál
-  szöveget – csak azt olvassa ki, ami a képen van.
+  szöveget – csak azt olvassa ki, ami a fájlban van.
+* **Ami nem kép, azon nincs OCR.** A Word- és Excel-fájlokban, és a legtöbb
+  PDF-ben valódi, gépi szöveg van: azt betű szerint pontosan vesszük át.
+  Felismerni csak azt kell, ami tényleg kép.
 * **Nincs szerver és nincs feltöltés.** Minden a böngészőben fut, a fájlok nem
   hagyják el a gépet.
-* **Offline működik.** A motor, a magyar/angol/német nyelvi adatok és a
-  PDF-olvasó a `vendor/` könyvtárban vannak, semmit nem tölt le futás közben.
+* **Offline működik.** A motor, a magyar/angol/német nyelvi adatok, a PDF-olvasó
+  és a ZIP-olvasó a `vendor/` könyvtárban vannak, semmit nem tölt le futás közben.
 * **Magyar nyelvű felület.**
 
 ## Indítás
@@ -55,9 +65,10 @@ a böngésződben történik – a fájljaid akkor sem töltődnek fel sehová.
 
 ## Használat
 
-1. **Fájlok kiválasztása** – húzd a fájlokat a kijelölt területre, tallózz, vagy
-   **illeszd be a vágólapról `Ctrl+V`-vel**. Támogatott: JPG, PNG, WEBP, BMP,
-   GIF, TIFF és PDF. Több fájl is megadható.
+1. **Fájlok kiválasztása** – húzd a fájlokat (vagy egy egész mappát) a kijelölt
+   területre, tallózz, válaszd a **Mappa kiválasztása** gombot, vagy **illeszd
+   be a vágólapról `Ctrl+V`-vel**. A támogatott formátumokat a fenti táblázat
+   sorolja fel.
 2. **Beállítások** – nyelv, oldalelrendezés, PDF-felbontás, elforgatás; a
    lenyíló részben képjavítás és Markdown-formázási kapcsolók.
 3. **Szöveg kinyerése** – a folyamat közben látszik, hol tart, és bármikor
@@ -75,6 +86,42 @@ azokban a böngészőkben, ahol a billentyűparancs nem jut el az oldalig (ilyen
 a böngésző engedélyt kérhet a vágólap olvasásához). A fájlkezelőből másolt
 kép- és PDF-fájlok beillesztése is működik.
 
+### Egész mappa feldolgozása
+
+Két út van rá, és mindkettő az **alkönyvtárakat is bejárja**:
+
+* a **Mappa kiválasztása** gomb,
+* vagy egyszerűen húzd rá a mappát az oldalra.
+
+A listában a mappán belüli útvonal látszik (`jelentesek/2024/marcius.docx`), és
+ez kerül a Markdown fejlécébe is, így több száz fájl után is tudni fogod,
+melyik honnan jött. A nem támogatott (pl. `.txt`, `.zip`) és a rejtett,
+ponttal kezdődő fájlok magától kimaradnak – a végén kiírja, hány maradt ki.
+
+A sorrend útvonal szerinti, tehát kiszámítható. Sok fájlnál a **Megszakítás**
+gombbal bármikor leállítható; az addig elkészült eredmények megmaradnak.
+
+### Word- és Excel-fájlok
+
+Ezekben valódi szöveg van, ezért itt nincs OCR – és nincs felismerési hiba sem.
+
+* **DOCX**: címsorok (a Word beépített stílusai alapján, nyelvtől függetlenül),
+  felsorolt és számozott listák a behúzási szintekkel, táblázatok, félkövér és
+  dőlt szedés, hiperhivatkozások. A követett változásoknál az elfogadott szöveg
+  marad benne, a töröltek kimaradnak.
+* **XLSX**: munkalaponként egy-egy Markdown-táblázat, a munkalap nevével.
+  A dátumként formázott cellák valódi dátumként jelennek meg, nem a
+  táblázatkezelő belső sorszámaként; a képletek helyén az eltárolt eredmény áll.
+  Az üres szélső sorok és oszlopok lemaradnak.
+* **DOC és XLS** (a régi, 1997-2003-as bináris formátumok): a szöveget és a
+  táblázatokat kiolvassuk, de ezek a fájlok jóval kevesebbet árulnak el a
+  szerkezetről. A `.doc`-nál nem tudjuk, melyik bekezdés volt címsor, ezért
+  minden bekezdés sima szövegként jelenik meg. Ha a szerkezet is fontos, mentsd
+  a fájlt `.docx`-ként, és úgy add be.
+
+Az Office-fájlok olvasása a `assets/iroda.js` modulban van (ZIP + XML az újabb,
+OLE-tároló + rekordfolyam a régi formátumokhoz).
+
 ## Android-alkalmazás (APK)
 
 Ugyanez az alkalmazás telefonon is fut, APK-ba csomagolva. A felismerés ott is
@@ -85,8 +132,9 @@ sem tud adatot kiküldeni.
   megjelenik: lefotózod a papírt, és a kép azonnal felismerésre kerül. Ehhez
   sem kamera-, sem tárhelyengedély nem kell – a fényképezést a rendszer
   kameraalkalmazása végzi, mi csak a kész képet vesszük át.
-* **Galéria és fájlok.** Bármelyik korábbi fotó vagy PDF is választható,
-  egyszerre több is.
+* **Galéria és fájlok.** Bármelyik korábbi fotó, PDF, Word- vagy Excel-fájl is
+  választható, egyszerre több is. (Egész mappát a telefon fájlválasztója nem ad
+  át, ez a lehetőség csak a böngészős változatban van meg.)
 * **Mentés.** A Markdown a **Letöltések** mappába kerül (Android 10-től),
   régebbi rendszereken az alkalmazás mappájába, és rögtön meg is osztható.
 * A telefon sötét/világos témáját átveszi.
@@ -187,6 +235,10 @@ meg is mondja: vidd fölé az egeret, vagy nézd meg a gomb alatti üzenetsávot
 
 ## Hogyan lesz a nyers szövegből Markdown?
 
+Ez a szakasz csak a **képekre és a szkennelt PDF-ekre** vonatkozik: a Word- és
+Excel-fájlok, valamint a szövegréteges PDF-ek kész szerkezetet hoznak magukkal,
+azon nincs mit találgatni.
+
 Az OCR nyers, tördelt szöveget ad vissza. Az alkalmazás ebből tisztán
 szabályalapú lépésekkel épít dokumentumszerkezetet:
 
@@ -215,10 +267,12 @@ inditas.bat             indítás Windowson (duplakattintás)
 inditas.sh              indítás macOS-en és Linuxon
 assets/styles.css       megjelenés (világos és sötét témával)
 assets/app.js           az alkalmazás logikája
+assets/iroda.js         Word- és Excel-fájlok olvasása
 scripts/server.js       tartalék statikus kiszolgáló, ha nincs Python
 vendor/tesseract/       tesseract.js + WebAssembly mag
 vendor/tessdata/        nyelvi adatok (hun, eng, deu)
 vendor/pdfjs/           pdf.js + cmap-ek és szabványos betűkészletek
+vendor/fflate/          ZIP-olvasó a .docx és .xlsx fájlokhoz
 scripts/vendor.sh       a vendor/ könyvtár újraépítése npm csomagokból
 ```
 
@@ -242,3 +296,4 @@ Az alkalmazás kódja szabadon használható. A `vendor/` könyvtár tartalma:
   [tesseract.js-core](https://github.com/naptha/tesseract.js-core) – Apache-2.0
 * [tessdata](https://github.com/tesseract-ocr/tessdata) nyelvi modellek – Apache-2.0
 * [pdf.js](https://github.com/mozilla/pdf.js) – Apache-2.0
+* [fflate](https://github.com/101arrowz/fflate) – MIT

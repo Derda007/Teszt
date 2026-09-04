@@ -342,6 +342,21 @@ select:focus-visible, .btn:focus-visible, .tab:focus-visible, textarea:focus-vis
 .preview hr { border: 0; border-top: 1px solid var(--border); margin: 1.3rem 0; }
 .preview em { color: var(--text-soft); }
 .preview code { background: var(--surface); padding: .1rem .3rem; border-radius: 4px; font-size: .88em; }
+.preview a { color: var(--accent); }
+
+/* Széles táblázat ne feszítse szét az oldalt: saját görgetést kap. */
+.tablewrap { overflow-x: auto; margin: 0 0 .9rem; }
+.preview table { border-collapse: collapse; font-size: .88rem; min-width: 100%; }
+.preview th,
+.preview td {
+  border: 1px solid var(--border);
+  padding: .32rem .6rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.preview th { background: var(--surface); font-weight: 700; }
+.preview tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--border) 22%, transparent); }
 
 /* ---------- lábléc / infó ---------- */
 
