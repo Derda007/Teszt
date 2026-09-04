@@ -47,12 +47,24 @@
     return KITERJESZTESEK[kiterjesztes(nev)] || null;
   }
 
-  /** Markdownban jelentéssel bíró karakterek semlegesítése. */
-  function vedd(szoveg) {
+  /**
+   * Markdownban jelentéssel bíró karakterek semlegesítése.
+   * Két lépésben: a szövegen belüli jelek futamonként, a sor elején
+   * jelentős jelek pedig csak a kész bekezdésen – különben egy szó
+   * közepén kezdődő futam elé is fölösleges \\ kerülne.
+   */
+  function veddJelek(szoveg) {
+    return String(szoveg).replace(/([\\`*[\]])/g, '\\$1');
+  }
+
+  function veddSorEleje(szoveg) {
     return String(szoveg)
-      .replace(/([\\`*[\]])/g, '\\$1')
       .replace(/^(\s*)([#>+-])/, '$1\\$2')
       .replace(/^(\s*)(\d{1,3})\./, '$1$2\\.');
+  }
+
+  function vedd(szoveg) {
+    return veddSorEleje(veddJelek(szoveg));
   }
 
   /** Táblázatcellában a sortörés és a függőleges vonal nem maradhat. */
@@ -521,13 +533,15 @@
     const numId = numPr ? ertek(elsoGyerek(numPr, 'numId')) : null;
     const ilvl = numPr ? Number(ertek(elsoGyerek(numPr, 'ilvl')) || 0) : 0;
 
+    const biztos = veddSorEleje(szoveg);
+
     if (numId && numId !== '0') {
       const szintek = ctx.szamozasFajtak.get(numId) || [];
       const fmt = szintek[ilvl] || szintek[0] || 'bullet';
       if (fmt !== 'none') {
         const behuzas = '  '.repeat(Math.min(ilvl, 5));
         const jel = fmt === 'bullet' ? '-' : '1.';
-        return { md: `${behuzas}${jel} ${szoveg}`, lista: true };
+        return { md: `${behuzas}${jel} ${szoveg}`, lista: true };   // a jel után nem kell védés
       }
     }
 
@@ -536,7 +550,7 @@
       return { md: `${'#'.repeat(Math.min(szint + 1, 6))} ${szoveg}`, lista: false };
     }
 
-    return { md: szoveg, lista: false };
+    return { md: biztos, lista: false };
   }
 
   /** A bekezdés szövege a betűformázásokkal együtt. */
@@ -580,7 +594,7 @@
     /* A jelölés csak a tényleges szövegre kerül, a széli szóközökre nem. */
     const eleje = szoveg.match(/^\s*/)[0];
     const vege = szoveg.match(/\s*$/)[0];
-    let mag = vedd(szoveg.slice(eleje.length, szoveg.length - vege.length));
+    let mag = veddJelek(szoveg.slice(eleje.length, szoveg.length - vege.length));
     if (!mag) return szoveg;
 
     if (felkover) mag = `**${mag}**`;
