@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -45,15 +45,9 @@ const TESSERACT_PATHS = {
   get langPath() { return asset('vendor/tessdata'); },
 };
 
-/* Az Android-alkalmazásban a beágyazott böngészőmotor kapja ezt a lapot.
-   A mentési híd jelenlétéből tudjuk, hogy ott futunk. */
-const ANDROID_ALKALMAZAS = typeof window.OcrAndroid !== 'undefined';
-
 /* A felismerésnél a Tesseract legfeljebb ekkora oldalt kap; e fölött
-   arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon.
-   Telefonon szűkösebb a memória, egy mai kameraképnél pedig 3200 képpont
-   is bőven elég a jó felismeréshez. */
-const MAX_SIDE = ANDROID_ALKALMAZAS ? 3200 : 4200;
+   arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon. */
+const MAX_SIDE = 4200;
 
 const NYELV_NEVEK = { hun: 'magyar', eng: 'angol', deu: 'német' };
 
@@ -610,10 +604,6 @@ async function getWorker(lang, onProgress) {
 
   state.worker = await Tesseract.createWorker(lang, 1, {
     ...TESSERACT_PATHS,
-    /* A beágyazott böngészőmotor egyes változatai nem engedik át a
-       blob:-ból indított háttérszál kéréseit, ezért ott a worker fájlját
-       közvetlenül a saját címéről töltjük be. */
-    workerBlobURL: !ANDROID_ALKALMAZAS,
     logger: (m) => { if (progressHook) progressHook(m); },
   });
   state.workerLang = lang;
@@ -832,7 +822,16 @@ async function processImage(item, opts, onProgress) {
   onProgress(0.05, 'kép előkészítése');
 
   const input = await prepareImageInput(file, opts);
-  const page = await recognize(input, opts, (p) => onProgress(0.1 + p * 0.85, 'szöveg felismerése'));
+  let page;
+  try {
+    page = await recognize(input, opts, (p) => onProgress(0.1 + p * 0.85, 'szöveg felismerése'));
+  } finally {
+    /* A vászon memóriáját nem várjuk meg a szemétgyűjtővel. */
+    if (input instanceof HTMLCanvasElement) {
+      input.width = 0;
+      input.height = 0;
+    }
+  }
 
   onProgress(0.98, 'Markdown összeállítása');
 
@@ -1487,32 +1486,11 @@ function downloadZip() {
 }
 
 function downloadMarkdown(text, fileName) {
-  /* Az Android-alkalmazásban a natív mentést használjuk: a WebView a
-     letöltési hivatkozásokat (főleg a blob: címeket) nem kezeli
-     megbízhatóan. Böngészőben ez a híd nem létezik. */
-  if (window.OcrAndroid && typeof window.OcrAndroid.mentes === 'function') {
-    try {
-      window.OcrAndroid.mentes(fileName, text);
-      return;
-    } catch (err) {
-      console.warn('A natív mentés nem sikerült, marad a böngészős út.', err);
-    }
-  }
-
   mentesLetoltessel(new Blob([text], { type: 'text/markdown;charset=utf-8' }), fileName);
 }
 
 /** Bináris tartalom (ZIP) mentése. */
 function downloadBinary(bajtok, fileName, mime) {
-  if (window.OcrAndroid && typeof window.OcrAndroid.mentesBinaris === 'function') {
-    try {
-      window.OcrAndroid.mentesBinaris(fileName, base64(bajtok), mime);
-      return;
-    } catch (err) {
-      console.warn('A natív mentés nem sikerült, marad a böngészős út.', err);
-    }
-  }
-
   mentesLetoltessel(new Blob([bajtok], { type: mime }), fileName);
 }
 
@@ -1525,16 +1503,6 @@ function mentesLetoltessel(blob, fileName) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/** Bájtok base64-be, adagolva – a nagy tömbök szétfeszítenék a hívást. */
-function base64(bajtok) {
-  let nyers = '';
-  const adag = 0x8000;
-  for (let i = 0; i < bajtok.length; i += adag) {
-    nyers += String.fromCharCode.apply(null, bajtok.subarray(i, i + adag));
-  }
-  return btoa(nyers);
 }
 
 /* ------------------------------------------------------------------ *
