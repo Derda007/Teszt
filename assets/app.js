@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.3.2';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -54,11 +54,22 @@ const ANDROID_ALKALMAZAS = typeof window.OcrAndroid !== 'undefined';
 const ANDROID_ATVETEL = typeof window.OcrAndroidAtvetel !== 'undefined'
   ? window.OcrAndroidAtvetel : null;
 
+/* Androidon minden feldolgozási lépést feljegyzünk: ha a rendszer munka
+   közben leállítja az alkalmazást, a következő induláskor kiderül, hol. */
+const ANDROID_NAPLO = typeof window.OcrAndroidNaplo !== 'undefined'
+  ? window.OcrAndroidNaplo : null;
+
+function naplo(metodus, ...param) {
+  if (!ANDROID_NAPLO) return;
+  try { ANDROID_NAPLO[metodus](...param); } catch { /* a napló sosem akaszthatja meg a munkát */ }
+}
+
 /* A felismerésnél a Tesseract legfeljebb ekkora oldalt kap; e fölött
    arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon.
-   Telefonon szűkösebb a memória, egy mai kameraképnél pedig 3200 képpont
-   is bőven elég a jó felismeréshez. */
-const MAX_SIDE = ANDROID_ALKALMAZAS ? 3200 : 4200;
+   Telefonon szűkösebb a memória: a felismerő motor a kép méretének
+   sokszorosát foglalja le, és ha kifogy, a rendszer az egész alkalmazást
+   leállítja. Egy lefényképezett oldalhoz 2400 képpont is elég. */
+const MAX_SIDE = ANDROID_ALKALMAZAS ? 2400 : 4200;
 
 const NYELV_NEVEK = { hun: 'magyar', eng: 'angol', deu: 'német' };
 
@@ -783,7 +794,14 @@ async function run() {
       if (state.cancelled) break;
 
       const label = `${done + 1}/${total} – ${item.label}`;
-      const fileProgress = (frac, text) => setProgress((done + frac) / total, `${label} · ${text}`);
+      let utolsoLepes = null;
+      const fileProgress = (frac, text) => {
+        setProgress((done + frac) / total, `${label} · ${text}`);
+        if (text !== utolsoLepes) {
+          utolsoLepes = text;
+          naplo('lepes', `${item.label} (${formatSize(item.file.size)}) · ${text}`);
+        }
+      };
 
       setNote(item, 'feldolgozás alatt…');
       try {
@@ -799,6 +817,7 @@ async function run() {
       } catch (err) {
         failed += 1;
         console.error(err);
+        naplo('megjegyzes', `${item.label}: ${err && err.message ? err.message : String(err)}`);
         setNote(item, `hiba: ${err && err.message ? err.message : 'ismeretlen hiba'}`, 'is-err');
       }
 
@@ -810,6 +829,16 @@ async function run() {
     el.cancelBtn.hidden = true;
     el.progressBox.hidden = true;
     renderFiles();
+    naplo('kesz');
+  }
+
+  /* Telefonon a felismerő motor által lefoglalt memória csak a motor
+     leállításával szabadul fel; a következő futás újraindítja. */
+  if (ANDROID_ALKALMAZAS && state.worker) {
+    const worker = state.worker;
+    state.worker = null;
+    state.workerLang = null;
+    worker.terminate().catch(() => {});
   }
 
   if (state.results.length > 0) showResults();
@@ -896,7 +925,16 @@ async function processImage(item, opts, onProgress) {
   onProgress(0.05, 'kép előkészítése');
 
   const input = await prepareImageInput(file, opts);
-  const page = await recognize(input, opts, (p) => onProgress(0.1 + p * 0.85, 'szöveg felismerése'));
+  let page;
+  try {
+    page = await recognize(input, opts, (p) => onProgress(0.1 + p * 0.85, 'szöveg felismerése'));
+  } finally {
+    /* A vászon memóriáját nem várjuk meg a szemétgyűjtővel. */
+    if (input instanceof HTMLCanvasElement) {
+      input.width = 0;
+      input.height = 0;
+    }
+  }
 
   onProgress(0.98, 'Markdown összeállítása');
 
@@ -1021,6 +1059,8 @@ async function renderPdfPage(page, opts) {
   return enhance(canvas, opts);
 }
 
+let utolsoMotorLepes = null;
+
 async function recognize(input, opts, onProgress) {
   const worker = await getWorker(opts.lang, (m) => {
     const label = STATUS_SZOTAR[m.status] || m.status;
@@ -1028,6 +1068,10 @@ async function recognize(input, opts, onProgress) {
       onProgress(typeof m.progress === 'number' ? m.progress : 0);
     } else {
       el.progressText.textContent = `${label}…`;
+      if (label !== utolsoMotorLepes) {
+        utolsoMotorLepes = label;
+        naplo('lepes', `OCR motor: ${label}`);
+      }
     }
   });
 

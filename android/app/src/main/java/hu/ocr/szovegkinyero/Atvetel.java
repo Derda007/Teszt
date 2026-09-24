@@ -51,7 +51,7 @@ final class Atvetel {
     static final String UTVONAL = "/_atadas/";
 
     /** Ugyanannyi, mint a weboldal MAX_SIDE értéke Androidon. */
-    private static final int MAX_OLDAL = 3200;
+    private static final int MAX_OLDAL = 2400;
 
     private static final String NAPLO = "OcrAtvetel";
 

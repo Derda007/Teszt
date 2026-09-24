@@ -8,4 +8,9 @@
     <string name="nincs_fajlkezelo">Nem található fájlkezelő alkalmazás.</string>
     <string name="nincs_bongeszo">Nem található böngésző.</string>
     <string name="megjelenito_ujraindult">Kevés volt a memória, ezért az oldal újraindult. A kiválasztott fájlokat add hozzá újra, ha nem jelentek meg a listán.</string>
+    <string name="leallas_cim">Az előző feldolgozás megszakadt</string>
+    <string name="leallas_szoveg">A szövegkinyerés közben az alkalmazás leállt. Az alábbi adatok segítenek kideríteni az okát – a Másolás gombbal a vágólapra teheted és továbbküldheted őket. Személyes adatot nem tartalmaz, csak a fájl nevét.</string>
+    <string name="leallas_masolas">Másolás</string>
+    <string name="leallas_bezaras">Bezárás</string>
+    <string name="leallas_masolva">A jelentés a vágólapra került.</string>
 </resources>

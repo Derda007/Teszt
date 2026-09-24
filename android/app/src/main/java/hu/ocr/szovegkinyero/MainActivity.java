@@ -2,7 +2,10 @@ package hu.ocr.szovegkinyero;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.app.AlertDialog;
 import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -52,6 +55,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private EszkozKiszolgalo kiszolgalo;
     private Atvetel atvetel;
+    private Diagnosztika diagnosztika;
 
     /** A képek kicsinyítése nem futhat a főszálon. */
     private final ExecutorService hatter = Executors.newSingleThreadExecutor();
@@ -70,6 +74,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle mentettAllapot) {
         super.onCreate(mentettAllapot);
+
+        diagnosztika = new Diagnosztika(this);
+        diagnosztika.hibakezeloTelepitese();
 
         atvetel = new Atvetel(this);
         kiszolgalo = new EszkozKiszolgalo(getAssets(), atvetel);
@@ -95,6 +102,29 @@ public class MainActivity extends Activity {
         if (mentettAllapot == null || webView.restoreState(mentettAllapot) == null) {
             webView.loadUrl(EszkozKiszolgalo.EREDET + "/index.html");
         }
+
+        leallasJelentese();
+    }
+
+    /** Ha az előző futás munka közben állt le, megmutatjuk, mit tudunk róla. */
+    private void leallasJelentese() {
+        final String jelentes = diagnosztika.elozoLeallas();
+        if (jelentes == null) {
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.leallas_cim)
+                .setMessage(getString(R.string.leallas_szoveg) + "\n\n" + jelentes)
+                .setPositiveButton(R.string.leallas_masolas, (d, w) -> {
+                    ClipboardManager vagolap =
+                            (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (vagolap != null) {
+                        vagolap.setPrimaryClip(ClipData.newPlainText("OCR hibajelentés", jelentes));
+                        Toast.makeText(this, R.string.leallas_masolva, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton(R.string.leallas_bezaras, null)
+                .show();
     }
 
     private void webViewLetrehozasa() {
@@ -108,6 +138,7 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new SajatWebChromeClient());
         webView.addJavascriptInterface(new MentesHid(this), MentesHid.NEV);
         webView.addJavascriptInterface(atvetel, Atvetel.NEV);
+        webView.addJavascriptInterface(diagnosztika, Diagnosztika.NEV);
     }
 
     private void beallitasok() {
@@ -173,13 +204,19 @@ public class MainActivity extends Activity {
          */
         @Override
         public boolean onRenderProcessGone(WebView nezet, RenderProcessGoneDetail reszletek) {
-            Log.w(NAPLO, "A megjelenítő leállt (összeomlás: " + reszletek.didCrash() + ")");
+            diagnosztika.esemeny("A megjelenítő folyamat leállt (összeomlás: "
+                    + reszletek.didCrash() + ", prioritás: "
+                    + reszletek.rendererPriorityAtExit() + ")", true);
 
             if (nezet == webView) {
                 webViewLetrehozasa();     // az új nézet le is cseréli a régit
                 webView.loadUrl(EszkozKiszolgalo.EREDET + "/index.html");
                 Toast.makeText(MainActivity.this, R.string.megjelenito_ujraindult,
                         Toast.LENGTH_LONG).show();
+                /* Ha munka közben történt, rögtön megmutatjuk a részleteket. */
+                if (!isFinishing()) {
+                    leallasJelentese();
+                }
             }
             nezet.destroy();
             return true;
