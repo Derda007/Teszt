@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.3.2';
+const APP_VERSION = '1.4.0';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -45,31 +45,9 @@ const TESSERACT_PATHS = {
   get langPath() { return asset('vendor/tessdata'); },
 };
 
-/* Az Android-alkalmazásban a beágyazott böngészőmotor kapja ezt a lapot.
-   A mentési híd jelenlétéből tudjuk, hogy ott futunk. */
-const ANDROID_ALKALMAZAS = typeof window.OcrAndroid !== 'undefined';
-
-/* Androidon a vágólap képeit és a fényképeket a natív oldal veszi át
-   (és kicsinyíti), mert a beágyazott böngészőmotorban ez nem megbízható. */
-const ANDROID_ATVETEL = typeof window.OcrAndroidAtvetel !== 'undefined'
-  ? window.OcrAndroidAtvetel : null;
-
-/* Androidon minden feldolgozási lépést feljegyzünk: ha a rendszer munka
-   közben leállítja az alkalmazást, a következő induláskor kiderül, hol. */
-const ANDROID_NAPLO = typeof window.OcrAndroidNaplo !== 'undefined'
-  ? window.OcrAndroidNaplo : null;
-
-function naplo(metodus, ...param) {
-  if (!ANDROID_NAPLO) return;
-  try { ANDROID_NAPLO[metodus](...param); } catch { /* a napló sosem akaszthatja meg a munkát */ }
-}
-
 /* A felismerésnél a Tesseract legfeljebb ekkora oldalt kap; e fölött
-   arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon.
-   Telefonon szűkösebb a memória: a felismerő motor a kép méretének
-   sokszorosát foglalja le, és ha kifogy, a rendszer az egész alkalmazást
-   leállítja. Egy lefényképezett oldalhoz 2400 képpont is elég. */
-const MAX_SIDE = ANDROID_ALKALMAZAS ? 2400 : 4200;
+   arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon. */
+const MAX_SIDE = 4200;
 
 const NYELV_NEVEK = { hun: 'magyar', eng: 'angol', deu: 'német' };
 
@@ -358,68 +336,9 @@ function handlePaste(event) {
   addFiles(collected, pasteMessage);
 }
 
-/** A natív oldal által átadott fájlok letöltése a saját eredetünkről. */
-async function androidFajlok(nevek) {
-  const fajlok = [];
-  for (const nev of nevek) {
-    try {
-      const valasz = await fetch(`/_atadas/${encodeURIComponent(nev)}`);
-      if (!valasz.ok) continue;
-      const blob = await valasz.blob();
-      fajlok.push(new File([blob], nev, { type: blob.type, lastModified: Date.now() }));
-    } catch (err) {
-      console.warn('Az átadott fájl nem tölthető be:', nev, err);
-    }
-  }
-  return fajlok;
-}
-
-async function pasteFromAndroid() {
-  let valasz;
-  try {
-    valasz = JSON.parse(ANDROID_ATVETEL.vagolapKep());
-  } catch {
-    valasz = { hiba: 'olvasas' };
-  }
-
-  if (valasz.hiba === 'ures') {
-    setStatus('A vágólapon nincs kép. Másolj ki egy képet, majd próbáld újra.', 'warn');
-    return;
-  }
-
-  const fajlok = valasz.fajlok ? await androidFajlok(valasz.fajlok) : [];
-  if (fajlok.length === 0) {
-    setStatus('A vágólapon lévő képet nem sikerült beolvasni.', 'warn');
-    return;
-  }
-  addFiles(fajlok, pasteMessage);
-}
-
-/** Olyan fájlok átvétele, amelyeket a fájlmező már nem kaphatott meg: a
- *  rendszer a fényképezés közben leállította az oldalt vagy az alkalmazást. */
-async function fuggoAtvetel() {
-  if (!ANDROID_ATVETEL) return;
-  let nevek = [];
-  try {
-    nevek = JSON.parse(ANDROID_ATVETEL.fuggoFajlok());
-  } catch {
-    return;
-  }
-  if (!Array.isArray(nevek) || nevek.length === 0) return;
-  addFiles(await androidFajlok(nevek), (n) => (n === 1
-    ? 'A fénykép a listára került.'
-    : `${n} fájl a listára került.`));
-}
-window.ocrFuggoAtvetel = fuggoAtvetel;
-
 /** A "Beillesztés vágólapról" gomb – ott is működik, ahol a Ctrl+V
  *  nem jut el az oldalig (a böngésző engedélyt kérhet rá). */
 async function pasteFromClipboard() {
-  if (ANDROID_ATVETEL) {
-    await pasteFromAndroid();
-    return;
-  }
-
   if (!navigator.clipboard || !navigator.clipboard.read) {
     setStatus('Ez a böngésző nem engedi a vágólap kiolvasását. Használd a Ctrl+V billentyűt.', 'warn');
     return;
@@ -685,10 +604,6 @@ async function getWorker(lang, onProgress) {
 
   state.worker = await Tesseract.createWorker(lang, 1, {
     ...TESSERACT_PATHS,
-    /* A beágyazott böngészőmotor egyes változatai nem engedik át a
-       blob:-ból indított háttérszál kéréseit, ezért ott a worker fájlját
-       közvetlenül a saját címéről töltjük be. */
-    workerBlobURL: !ANDROID_ALKALMAZAS,
     logger: (m) => { if (progressHook) progressHook(m); },
   });
   state.workerLang = lang;
@@ -794,14 +709,7 @@ async function run() {
       if (state.cancelled) break;
 
       const label = `${done + 1}/${total} – ${item.label}`;
-      let utolsoLepes = null;
-      const fileProgress = (frac, text) => {
-        setProgress((done + frac) / total, `${label} · ${text}`);
-        if (text !== utolsoLepes) {
-          utolsoLepes = text;
-          naplo('lepes', `${item.label} (${formatSize(item.file.size)}) · ${text}`);
-        }
-      };
+      const fileProgress = (frac, text) => setProgress((done + frac) / total, `${label} · ${text}`);
 
       setNote(item, 'feldolgozás alatt…');
       try {
@@ -817,7 +725,6 @@ async function run() {
       } catch (err) {
         failed += 1;
         console.error(err);
-        naplo('megjegyzes', `${item.label}: ${err && err.message ? err.message : String(err)}`);
         setNote(item, `hiba: ${err && err.message ? err.message : 'ismeretlen hiba'}`, 'is-err');
       }
 
@@ -829,16 +736,6 @@ async function run() {
     el.cancelBtn.hidden = true;
     el.progressBox.hidden = true;
     renderFiles();
-    naplo('kesz');
-  }
-
-  /* Telefonon a felismerő motor által lefoglalt memória csak a motor
-     leállításával szabadul fel; a következő futás újraindítja. */
-  if (ANDROID_ALKALMAZAS && state.worker) {
-    const worker = state.worker;
-    state.worker = null;
-    state.workerLang = null;
-    worker.terminate().catch(() => {});
   }
 
   if (state.results.length > 0) showResults();
@@ -1059,8 +956,6 @@ async function renderPdfPage(page, opts) {
   return enhance(canvas, opts);
 }
 
-let utolsoMotorLepes = null;
-
 async function recognize(input, opts, onProgress) {
   const worker = await getWorker(opts.lang, (m) => {
     const label = STATUS_SZOTAR[m.status] || m.status;
@@ -1068,10 +963,6 @@ async function recognize(input, opts, onProgress) {
       onProgress(typeof m.progress === 'number' ? m.progress : 0);
     } else {
       el.progressText.textContent = `${label}…`;
-      if (label !== utolsoMotorLepes) {
-        utolsoMotorLepes = label;
-        naplo('lepes', `OCR motor: ${label}`);
-      }
     }
   });
 
@@ -1595,32 +1486,11 @@ function downloadZip() {
 }
 
 function downloadMarkdown(text, fileName) {
-  /* Az Android-alkalmazásban a natív mentést használjuk: a WebView a
-     letöltési hivatkozásokat (főleg a blob: címeket) nem kezeli
-     megbízhatóan. Böngészőben ez a híd nem létezik. */
-  if (window.OcrAndroid && typeof window.OcrAndroid.mentes === 'function') {
-    try {
-      window.OcrAndroid.mentes(fileName, text);
-      return;
-    } catch (err) {
-      console.warn('A natív mentés nem sikerült, marad a böngészős út.', err);
-    }
-  }
-
   mentesLetoltessel(new Blob([text], { type: 'text/markdown;charset=utf-8' }), fileName);
 }
 
 /** Bináris tartalom (ZIP) mentése. */
 function downloadBinary(bajtok, fileName, mime) {
-  if (window.OcrAndroid && typeof window.OcrAndroid.mentesBinaris === 'function') {
-    try {
-      window.OcrAndroid.mentesBinaris(fileName, base64(bajtok), mime);
-      return;
-    } catch (err) {
-      console.warn('A natív mentés nem sikerült, marad a böngészős út.', err);
-    }
-  }
-
   mentesLetoltessel(new Blob([bajtok], { type: mime }), fileName);
 }
 
@@ -1633,16 +1503,6 @@ function mentesLetoltessel(blob, fileName) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-/** Bájtok base64-be, adagolva – a nagy tömbök szétfeszítenék a hívást. */
-function base64(bajtok) {
-  let nyers = '';
-  const adag = 0x8000;
-  for (let i = 0; i < bajtok.length; i += adag) {
-    nyers += String.fromCharCode.apply(null, bajtok.subarray(i, i + adag));
-  }
-  return btoa(nyers);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1826,4 +1686,3 @@ if (el.appVersion) el.appVersion.textContent = `verzió: ${APP_VERSION}`;
 
 renderFiles();
 checkEnvironment();
-fuggoAtvetel();

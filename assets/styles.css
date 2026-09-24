@@ -20,11 +20,8 @@
 }
 
 /*
- * Sötét téma. Kétféleképpen kapcsolódhat be:
- *  - a böngésző rendszerbeállítása szerint (prefers-color-scheme),
- *  - vagy a data-theme jelzővel, amit az Android-alkalmazás állít be a
- *    készülék beállítása alapján (a WebView nem mindig adja tovább a
- *    rendszertémát az oldalnak).
+ * Sötét téma: a böngésző rendszerbeállítása szerint (prefers-color-scheme),
+ * vagy kifejezetten a data-theme="dark" jelzővel.
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
