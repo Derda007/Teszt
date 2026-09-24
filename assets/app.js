@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -48,6 +48,11 @@ const TESSERACT_PATHS = {
 /* Az Android-alkalmazásban a beágyazott böngészőmotor kapja ezt a lapot.
    A mentési híd jelenlétéből tudjuk, hogy ott futunk. */
 const ANDROID_ALKALMAZAS = typeof window.OcrAndroid !== 'undefined';
+
+/* Androidon a vágólap képeit és a fényképeket a natív oldal veszi át
+   (és kicsinyíti), mert a beágyazott böngészőmotorban ez nem megbízható. */
+const ANDROID_ATVETEL = typeof window.OcrAndroidAtvetel !== 'undefined'
+  ? window.OcrAndroidAtvetel : null;
 
 /* A felismerésnél a Tesseract legfeljebb ekkora oldalt kap; e fölött
    arányosan kicsinyítünk, hogy a memóriahasználat kordában maradjon.
@@ -342,9 +347,68 @@ function handlePaste(event) {
   addFiles(collected, pasteMessage);
 }
 
+/** A natív oldal által átadott fájlok letöltése a saját eredetünkről. */
+async function androidFajlok(nevek) {
+  const fajlok = [];
+  for (const nev of nevek) {
+    try {
+      const valasz = await fetch(`/_atadas/${encodeURIComponent(nev)}`);
+      if (!valasz.ok) continue;
+      const blob = await valasz.blob();
+      fajlok.push(new File([blob], nev, { type: blob.type, lastModified: Date.now() }));
+    } catch (err) {
+      console.warn('Az átadott fájl nem tölthető be:', nev, err);
+    }
+  }
+  return fajlok;
+}
+
+async function pasteFromAndroid() {
+  let valasz;
+  try {
+    valasz = JSON.parse(ANDROID_ATVETEL.vagolapKep());
+  } catch {
+    valasz = { hiba: 'olvasas' };
+  }
+
+  if (valasz.hiba === 'ures') {
+    setStatus('A vágólapon nincs kép. Másolj ki egy képet, majd próbáld újra.', 'warn');
+    return;
+  }
+
+  const fajlok = valasz.fajlok ? await androidFajlok(valasz.fajlok) : [];
+  if (fajlok.length === 0) {
+    setStatus('A vágólapon lévő képet nem sikerült beolvasni.', 'warn');
+    return;
+  }
+  addFiles(fajlok, pasteMessage);
+}
+
+/** Olyan fájlok átvétele, amelyeket a fájlmező már nem kaphatott meg: a
+ *  rendszer a fényképezés közben leállította az oldalt vagy az alkalmazást. */
+async function fuggoAtvetel() {
+  if (!ANDROID_ATVETEL) return;
+  let nevek = [];
+  try {
+    nevek = JSON.parse(ANDROID_ATVETEL.fuggoFajlok());
+  } catch {
+    return;
+  }
+  if (!Array.isArray(nevek) || nevek.length === 0) return;
+  addFiles(await androidFajlok(nevek), (n) => (n === 1
+    ? 'A fénykép a listára került.'
+    : `${n} fájl a listára került.`));
+}
+window.ocrFuggoAtvetel = fuggoAtvetel;
+
 /** A "Beillesztés vágólapról" gomb – ott is működik, ahol a Ctrl+V
  *  nem jut el az oldalig (a böngésző engedélyt kérhet rá). */
 async function pasteFromClipboard() {
+  if (ANDROID_ATVETEL) {
+    await pasteFromAndroid();
+    return;
+  }
+
   if (!navigator.clipboard || !navigator.clipboard.read) {
     setStatus('Ez a böngésző nem engedi a vágólap kiolvasását. Használd a Ctrl+V billentyűt.', 'warn');
     return;
@@ -1718,3 +1782,4 @@ if (el.appVersion) el.appVersion.textContent = `verzió: ${APP_VERSION}`;
 
 renderFiles();
 checkEnvironment();
+fuggoAtvetel();

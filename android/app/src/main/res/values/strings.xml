@@ -7,4 +7,5 @@
     <string name="mentes_hiba">A mentés nem sikerült: %1$s</string>
     <string name="nincs_fajlkezelo">Nem található fájlkezelő alkalmazás.</string>
     <string name="nincs_bongeszo">Nem található böngésző.</string>
+    <string name="megjelenito_ujraindult">Kevés volt a memória, ezért az oldal újraindult. A kiválasztott fájlokat add hozzá újra, ha nem jelentek meg a listán.</string>
 </resources>

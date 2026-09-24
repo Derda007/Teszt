@@ -4,6 +4,8 @@ import android.content.res.AssetManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
@@ -46,6 +48,12 @@ final class EszkozKiszolgalo {
         TIPUSOK.put("png", "image/png");
         TIPUSOK.put("jpg", "image/jpeg");
         TIPUSOK.put("jpeg", "image/jpeg");
+        TIPUSOK.put("webp", "image/webp");
+        TIPUSOK.put("gif", "image/gif");
+        TIPUSOK.put("bmp", "image/bmp");
+        TIPUSOK.put("tif", "image/tiff");
+        TIPUSOK.put("tiff", "image/tiff");
+        TIPUSOK.put("pdf", "application/pdf");
         TIPUSOK.put("svg", "image/svg+xml");
         TIPUSOK.put("ico", "image/x-icon");
         TIPUSOK.put("md", "text/markdown");
@@ -53,9 +61,11 @@ final class EszkozKiszolgalo {
     }
 
     private final AssetManager eszkozok;
+    private final Atvetel atvetel;
 
-    EszkozKiszolgalo(AssetManager eszkozok) {
+    EszkozKiszolgalo(AssetManager eszkozok, Atvetel atvetel) {
         this.eszkozok = eszkozok;
+        this.atvetel = atvetel;
     }
 
     /**
@@ -83,6 +93,11 @@ final class EszkozKiszolgalo {
             return hiba(403, "Tiltott");
         }
 
+        /* A natív oldalról átadott fájlok (vágólap, fénykép). */
+        if (utvonal.startsWith(Atvetel.UTVONAL)) {
+            return atadottFajl(utvonal.substring(Atvetel.UTVONAL.length()));
+        }
+
         String eszkoz = GYOKER + utvonal;
 
         try {
@@ -96,6 +111,21 @@ final class EszkozKiszolgalo {
             String kodolas = tipus.startsWith("text/") || tipus.endsWith("json") ? "utf-8" : null;
 
             return new WebResourceResponse(tipus, kodolas, 200, "OK", fejlecek, folyam);
+        } catch (IOException e) {
+            return hiba(404, "Nincs ilyen fájl");
+        }
+    }
+
+    private WebResourceResponse atadottFajl(String nev) {
+        File fajl = atvetel.kiszolgalando(nev);
+        if (fajl == null) {
+            return hiba(404, "Nincs ilyen fájl");
+        }
+        try {
+            Map<String, String> fejlecek = new HashMap<>();
+            fejlecek.put("Cache-Control", "no-store");
+            return new WebResourceResponse(tipus(nev), null, 200, "OK", fejlecek,
+                    new FileInputStream(fajl));
         } catch (IOException e) {
             return hiba(404, "Nincs ilyen fájl");
         }

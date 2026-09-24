@@ -10,7 +10,9 @@ import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.view.ViewGroup;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -29,6 +31,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Az OCR Szövegkinyerő Android-változata.
@@ -40,21 +44,60 @@ public class MainActivity extends Activity {
 
     private static final int FAJLVALASZTAS = 1001;
 
+    private static final String NAPLO = "OcrMain";
+
+    /** A mentett állapotban a kamerakép fájljának útvonala. */
+    private static final String ALLAPOT_KAMERAFAJL = "kamerafajl";
+
     private WebView webView;
     private EszkozKiszolgalo kiszolgalo;
+    private Atvetel atvetel;
+
+    /** A képek kicsinyítése nem futhat a főszálon. */
+    private final ExecutorService hatter = Executors.newSingleThreadExecutor();
 
     /** A folyamatban lévő fájlválasztás visszahívása. */
     private ValueCallback<Uri[]> fajlValaszthivas;
 
+    /** Az a nézet, amelyik a fájlválasztást kérte. Ha közben lecseréltük,
+     *  a visszahívása már senkihez nem jut el. */
+    private WebView valasztoNezet;
+
     /** A kamera ide írja a képet, ha a felhasználó fényképezést választ. */
+    private File kameraFajl;
     private Uri kameraCim;
 
     @Override
     protected void onCreate(Bundle mentettAllapot) {
         super.onCreate(mentettAllapot);
 
-        kiszolgalo = new EszkozKiszolgalo(getAssets());
+        atvetel = new Atvetel(this);
+        kiszolgalo = new EszkozKiszolgalo(getAssets(), atvetel);
 
+        if (mentettAllapot == null) {
+            /* Friss indítás: a korábbi futások ideiglenes fájljai törölhetők. */
+            atvetel.takaritas();
+            regiFotokTorlese();
+        } else {
+            /* A rendszer a kamera használata közben leállíthatta az
+               alkalmazást; a kép helyét meg kell őriznünk, hogy az
+               onActivityResult még átvehesse. */
+            String ut = mentettAllapot.getString(ALLAPOT_KAMERAFAJL);
+            if (ut != null) {
+                kameraFajl = new File(ut);
+            }
+        }
+
+        webViewLetrehozasa();
+
+        /* Folyamat-újraindítás után az előzményekből állunk vissza; ha nincs
+           mit visszaállítani, egyszerűen betöltjük az oldalt. */
+        if (mentettAllapot == null || webView.restoreState(mentettAllapot) == null) {
+            webView.loadUrl(EszkozKiszolgalo.EREDET + "/index.html");
+        }
+    }
+
+    private void webViewLetrehozasa() {
         webView = new WebView(this);
         webView.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -64,12 +107,7 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new SajatWebViewClient());
         webView.setWebChromeClient(new SajatWebChromeClient());
         webView.addJavascriptInterface(new MentesHid(this), MentesHid.NEV);
-
-        /* Folyamat-újraindítás után az előzményekből állunk vissza; ha nincs
-           mit visszaállítani, egyszerűen betöltjük az oldalt. */
-        if (mentettAllapot == null || webView.restoreState(mentettAllapot) == null) {
-            webView.loadUrl(EszkozKiszolgalo.EREDET + "/index.html");
-        }
+        webView.addJavascriptInterface(atvetel, Atvetel.NEV);
     }
 
     private void beallitasok() {
@@ -124,6 +162,28 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView nezet, String cim) {
             temaAtadasa();
         }
+
+        /**
+         * A megjelenítő folyamat leállt – többnyire azért, mert a rendszer
+         * memóriát szabadított fel (pl. amíg a kamera volt előtérben), vagy
+         * mert egy túl nagy kép kifogyasztotta a memóriát. Ha ezt nem kezeljük
+         * ({@code false}), Android 8-tól az egész alkalmazás leáll: ez volt a
+         * fényképezés és a beillesztés utáni "kilépés" oka. Helyette új
+         * nézetet hozunk létre, és újratöltjük az oldalt.
+         */
+        @Override
+        public boolean onRenderProcessGone(WebView nezet, RenderProcessGoneDetail reszletek) {
+            Log.w(NAPLO, "A megjelenítő leállt (összeomlás: " + reszletek.didCrash() + ")");
+
+            if (nezet == webView) {
+                webViewLetrehozasa();     // az új nézet le is cseréli a régit
+                webView.loadUrl(EszkozKiszolgalo.EREDET + "/index.html");
+                Toast.makeText(MainActivity.this, R.string.megjelenito_ujraindult,
+                        Toast.LENGTH_LONG).show();
+            }
+            nezet.destroy();
+            return true;
+        }
     }
 
     /** A rendszer sötét/világos beállítását átadjuk az oldalnak. */
@@ -155,6 +215,8 @@ public class MainActivity extends Activity {
                 fajlValaszthivas.onReceiveValue(null);
             }
             fajlValaszthivas = visszahivas;
+            valasztoNezet = nezet;
+            kameraFajl = null;
             kameraCim = null;
 
             Intent tallozas = parameterek.createIntent();
@@ -172,6 +234,8 @@ public class MainActivity extends Activity {
                 return true;
             } catch (ActivityNotFoundException e) {
                 fajlValaszthivas = null;
+                valasztoNezet = null;
+                kameraTorlese();
                 Toast.makeText(MainActivity.this, R.string.nincs_fajlkezelo, Toast.LENGTH_LONG).show();
                 visszahivas.onReceiveValue(null);
                 return false;
@@ -206,8 +270,8 @@ public class MainActivity extends Activity {
                 return null;
             }
 
-            kameraCim = FileProvider.getUriForFile(
-                    this, getPackageName() + ".fileprovider", kep);
+            kameraFajl = kep;
+            kameraCim = fajlCim(kep);
 
             szandek.putExtra(MediaStore.EXTRA_OUTPUT, kameraCim);
             szandek.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -223,8 +287,8 @@ public class MainActivity extends Activity {
             }
 
             return szandek;
-        } catch (IOException e) {
-            kameraCim = null;
+        } catch (IOException | IllegalArgumentException e) {
+            kameraTorlese();
             return null;
         }
     }
@@ -253,41 +317,145 @@ public class MainActivity extends Activity {
             return;
         }
 
-        if (fajlValaszthivas == null) {
-            return;
-        }
+        final ValueCallback<Uri[]> visszahivas = fajlValaszthivas;
+        final WebView nezet = valasztoNezet;
+        final File kamera = kameraFajl;
+        fajlValaszthivas = null;
+        valasztoNezet = null;
+        kameraFajl = null;
+        kameraCim = null;
 
-        Uri[] cimek = null;
+        final List<Uri> valasztott = new ArrayList<>();
+        boolean kamerabol = false;
 
         if (eredmeny == RESULT_OK) {
             if (adat == null || (adat.getData() == null && adat.getClipData() == null)) {
                 /* A kameraalkalmazás nem ad vissza adatot: a képet abba a
                    fájlba írta, amit mi adtunk meg neki. */
-                if (kameraCim != null) {
-                    cimek = new Uri[]{kameraCim};
+                if (kamera != null && kamera.length() > 0) {
+                    kamerabol = true;
                 }
             } else if (adat.getClipData() != null) {
                 ClipData kivalasztott = adat.getClipData();
-                List<Uri> lista = new ArrayList<>();
                 for (int i = 0; i < kivalasztott.getItemCount(); i++) {
                     Uri cim = kivalasztott.getItemAt(i).getUri();
                     if (cim != null) {
-                        lista.add(cim);
+                        valasztott.add(cim);
                     }
                 }
-                if (!lista.isEmpty()) {
-                    cimek = lista.toArray(new Uri[0]);
-                }
             } else {
-                cimek = new Uri[]{adat.getData()};
+                valasztott.add(adat.getData());
             }
         }
 
-        /* A visszahívást minden ágon meg KELL hívni – különben a fájlmező
-           örökre használhatatlan marad. */
-        fajlValaszthivas.onReceiveValue(cimek);
-        fajlValaszthivas = null;
+        if (!kamerabol && kamera != null) {
+            /* Nem fényképezett (vagy megszakította): az üres fájl törölhető. */
+            //noinspection ResultOfMethodCallIgnored
+            kamera.delete();
+        }
+
+        /* A visszahívás csak akkor él, ha a kérő nézet még a helyén van. Ha
+           közben a rendszer leállította a megjelenítőt vagy az egész
+           alkalmazást, a választott fájlokat függőbe tesszük, és az
+           újratöltött oldal onnan veszi át őket. */
+        final boolean elo = visszahivas != null && nezet != null && nezet == webView;
+
+        if (!kamerabol && elo) {
+            /* Galéria vagy fájlkezelő: a címek változatlanul mehetnek. */
+            visszahivas.onReceiveValue(valasztott.isEmpty() ? null : valasztott.toArray(new Uri[0]));
+            return;
+        }
+
+        if (!kamerabol && valasztott.isEmpty()) {
+            return;
+        }
+
+        /* A fénykép kicsinyítése (és a függőbe tett fájlok másolása) a
+           háttérben fut; a visszahívást MINDEN ágon meg kell hívni – különben
+           a fájlmező örökre használhatatlan marad. */
+        final boolean foto = kamerabol;
+        hatter.execute(new Runnable() {
+            @Override
+            public void run() {
+                final List<String> nevek = new ArrayList<>();
+                if (foto) {
+                    valasztott.add(Uri.fromFile(kamera));
+                }
+                for (Uri cim : valasztott) {
+                    try {
+                        nevek.add(atvetel.atvesz(cim, foto ? "foto" : "fajl"));
+                    } catch (Exception | OutOfMemoryError e) {
+                        Log.w(NAPLO, "A kiválasztott fájlt nem sikerült átvenni", e);
+                    }
+                }
+                if (foto) {
+                    //noinspection ResultOfMethodCallIgnored
+                    kamera.delete();
+                }
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        atadas(elo ? visszahivas : null, nezet, nevek);
+                    }
+                });
+            }
+        });
+    }
+
+    /** A kész fájlok átadása: a fájlmezőnek, vagy – ha az már nem él – függőben. */
+    private void atadas(ValueCallback<Uri[]> visszahivas, WebView nezet, List<String> nevek) {
+        /* A kicsinyítés alatt is lecserélődhetett a nézet. */
+        if (visszahivas != null && nezet != null && nezet == webView) {
+            List<Uri> cimek = new ArrayList<>();
+            for (String nev : nevek) {
+                File f = atvetel.kiszolgalando(nev);
+                if (f != null) {
+                    try {
+                        cimek.add(fajlCim(f));
+                    } catch (IllegalArgumentException e) {
+                        Log.w(NAPLO, "A fájl nem adható át", e);
+                    }
+                }
+            }
+            visszahivas.onReceiveValue(cimek.isEmpty() ? null : cimek.toArray(new Uri[0]));
+            return;
+        }
+
+        if (nevek.isEmpty()) {
+            return;
+        }
+        atvetel.fuggobe(nevek);
+        /* Ha az oldal már betöltött, most szólunk neki; ha még nem, induláskor
+           magától is rákérdez. */
+        if (webView != null) {
+            webView.evaluateJavascript(
+                    "window.ocrFuggoAtvetel && window.ocrFuggoAtvetel()", null);
+        }
+    }
+
+    private Uri fajlCim(File f) {
+        return FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", f);
+    }
+
+    private void kameraTorlese() {
+        if (kameraFajl != null) {
+            //noinspection ResultOfMethodCallIgnored
+            kameraFajl.delete();
+        }
+        kameraFajl = null;
         kameraCim = null;
+    }
+
+    private void regiFotokTorlese() {
+        File[] regiek = new File(getFilesDir(), "fotok").listFiles();
+        if (regiek == null) {
+            return;
+        }
+        for (File f : regiek) {
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+        }
     }
 
     /* ------------------------------------------------------------------ *
@@ -297,6 +465,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle allapot) {
         super.onSaveInstanceState(allapot);
+        if (kameraFajl != null) {
+            allapot.putString(ALLAPOT_KAMERAFAJL, kameraFajl.getAbsolutePath());
+        }
         if (webView != null) {
             webView.saveState(allapot);
         }
@@ -313,6 +484,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        hatter.shutdown();
         if (webView != null) {
             webView.destroy();
             webView = null;
