@@ -1,8 +1,9 @@
 # OCR Szövegkinyerő
 
 Egyoldalas webalkalmazás, amely **fotókból, szkennelt képekből, PDF-ekből,
-valamint Word- és Excel-fájlokból kinyeri a szöveget**, majd az eredményt
-**Markdown (.md) fájlként** menti. Egyszerre **egész mappákat** is befogad.
+Word- és Excel-fájlokból, szövegfájlokból és e-könyvekből kinyeri a szöveget**,
+majd az eredményt **Markdown (.md) fájlként** menti. Egyszerre **egész
+mappákat** is befogad.
 
 | Formátum | Hogyan olvassuk ki |
 | --- | --- |
@@ -10,6 +11,9 @@ valamint Word- és Excel-fájlokból kinyeri a szöveget**, majd az eredményt
 | PDF | ha van benne valódi szöveg, azt; egyébként oldalanként OCR |
 | DOCX, DOC | közvetlenül a dokumentumból – címsorok, felsorolások, táblázatok |
 | XLSX, XLS | közvetlenül a munkafüzetből – munkalaponként egy táblázat |
+| TXT | közvetlenül, a karakterkódolás felismerésével |
+| EPUB | fejezetenként, a könyv címével és szerzőjével együtt |
+| MOBI, PRC | ugyanúgy, ha a könyv nem másolásvédett |
 
 * **Nincs benne mesterséges intelligencia.** A felismerést a klasszikus
   [Tesseract](https://github.com/tesseract-ocr/tesseract) OCR motor végzi
@@ -145,6 +149,30 @@ Ezekben valódi szöveg van, ezért itt nincs OCR – és nincs felismerési hib
 Az Office-fájlok olvasása a `assets/iroda.js` modulban van (ZIP + XML az újabb,
 OLE-tároló + rekordfolyam a régi formátumokhoz).
 
+### Szövegfájlok és e-könyvek
+
+* **TXT**: a karakterkódolást magától felismeri. A BOM-ot és az UTF-8-at
+  biztosan megállapítja; ha a fájl régebbi, közép-európai kódlapon készült
+  (Windows-1250, ISO-8859-2), azt a magyar ékezetes betűk alapján választja ki
+  a nyugati kódlap helyett – különben az `ő` és az `ű` helyén `õ` és `û` állna.
+  A szerkezetet ugyanaz a logika rakja össze, mint az OCR-nél: a tördelt sorok
+  bekezdéssé fűzése, a felsorolások és a címsorok felismerése a 2. lépés
+  kapcsolóival szabályozható.
+* **EPUB**: a fejezetek a könyv saját sorrendjében (gerinc) kerülnek egymás
+  után, a címsorokkal, felsorolásokkal, táblázatokkal, idézetekkel és a külső
+  hivatkozásokkal együtt. A dokumentum címe és a `Szerző` a könyv metaadataiból
+  jön, nem a fájlnévből. Ha egy fejezet nem kezdődik címsorral, a lap saját
+  címe kerül az élére.
+* **MOBI / PRC**: ugyanaz a kimenet. A MOBI nem ismeri a `h1`–`h6` elemeket,
+  a címsor ott nagyobb betűs, félkövér bekezdés – ezeket visszafordítjuk valódi
+  címsorrá.
+
+Két eset, amit nem lehet kiolvasni, és az alkalmazás meg is mondja:
+
+* **másolásvédett (DRM) könyv** – a tartalma titkosított, nincs mit tenni vele;
+* **Amazon saját tömörítésével (HUFF/CDIC) készült MOBI** – ezt az alkalmazás
+  nem bontja ki; alakítsd át EPUB-ba (például Calibre-rel), és úgy add be.
+
 ## Android-alkalmazás (APK)
 
 Ugyanez az alkalmazás telefonon is fut, APK-ba csomagolva. A felismerés ott is
@@ -155,8 +183,8 @@ sem tud adatot kiküldeni.
   megjelenik: lefotózod a papírt, és a kép azonnal felismerésre kerül. Ehhez
   sem kamera-, sem tárhelyengedély nem kell – a fényképezést a rendszer
   kameraalkalmazása végzi, mi csak a kész képet vesszük át.
-* **Galéria és fájlok.** Bármelyik korábbi fotó, PDF, Word- vagy Excel-fájl is
-  választható, egyszerre több is. (Egész mappát a telefon fájlválasztója nem ad
+* **Galéria és fájlok.** Bármelyik korábbi fotó, PDF, Office-fájl, szövegfájl
+  vagy e-könyv is választható, egyszerre több is. (Egész mappát a telefon fájlválasztója nem ad
   át, ez a lehetőség csak a böngészős változatban van meg.)
 * **Mentés.** A Markdown – és több fájlnál a ZIP – a **Letöltések** mappába
   kerül (Android 10-től), régebbi rendszereken az alkalmazás mappájába, és
@@ -292,6 +320,7 @@ inditas.sh              indítás macOS-en és Linuxon
 assets/styles.css       megjelenés (világos és sötét témával)
 assets/app.js           az alkalmazás logikája
 assets/iroda.js         Word- és Excel-fájlok olvasása
+assets/konyv.js         szövegfájlok és e-könyvek olvasása
 scripts/server.js       tartalék statikus kiszolgáló, ha nincs Python
 vendor/tesseract/       tesseract.js + WebAssembly mag
 vendor/tessdata/        nyelvi adatok (hun, eng, deu)

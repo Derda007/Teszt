@@ -12,7 +12,7 @@
 /* A lábléc kiírja: így egy pillanat alatt látszik, ha a böngésző még a
    gyorsítótárból szolgálja ki a régi változatot. Frissítéskor az
    index.html "?v=" paramétereit is állítsd ugyanerre. */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 /* Az oldal saját címéhez képest oldjuk fel a hivatkozásokat, hogy a
    projekt alkönyvtárból kiszolgálva is működjön. */
@@ -143,15 +143,25 @@ const isImage = (file) => file.type.startsWith('image/') || /\.(jpe?g|png|webp|b
 /** Word- vagy Excel-fájl? A választ az iroda.js modul adja. */
 const officeKind = (file) => (window.Iroda ? window.Iroda.fajta(file.name) : null);
 
+/** Szövegfájl vagy e-könyv? A választ a konyv.js modul adja. */
+const bookKind = (file) => (window.Konyv ? window.Konyv.fajta(file.name) : null);
+
 const ICONS = {
   pdf: '📕', image: '🖼️', docx: '📘', doc: '📘', xlsx: '📗', xls: '📗',
+  txt: '📄', epub: '📙', mobi: '📙',
 };
+
+/** Ezeket nem az OCR, hanem a saját olvasóik dolgozzák fel. */
+const OFFICE_FAJTAK = new Set(['docx', 'doc', 'xlsx', 'xls']);
+const KONYV_FAJTAK = new Set(['txt', 'epub', 'mobi']);
 
 /** @return a feldolgozás fajtája, vagy null, ha nem tudunk vele mit kezdeni. */
 function fileKind(file) {
   if (isPdf(file)) return 'pdf';
   const office = officeKind(file);
   if (office) return office;
+  const book = bookKind(file);
+  if (book) return book;
   if (isImage(file)) return 'image';
   return null;
 }
@@ -726,6 +736,7 @@ async function run() {
         let result;
         if (item.kind === 'pdf') result = await processPdf(item, opts, fileProgress);
         else if (item.kind === 'image') result = await processImage(item, opts, fileProgress);
+        else if (KONYV_FAJTAK.has(item.kind)) result = await processBook(item, opts, fileProgress);
         else result = await processOffice(item, opts, fileProgress);
 
         if (state.cancelled) break;
@@ -767,6 +778,8 @@ function describeResult(result) {
   if (result.office) {
     if (result.munkalapok) {
       parts.push(result.munkalapok === 1 ? '1 munkalap' : `${result.munkalapok} munkalap`);
+    } else if (result.fejezetek) {
+      parts.push(result.fejezetek === 1 ? '1 fejezet' : `${result.fejezetek} fejezet`);
     } else if (result.bekezdesek) {
       parts.push(`${result.bekezdesek} bekezdés`);
     }
@@ -805,7 +818,7 @@ async function processOffice(item, opts, onProgress) {
     pages: [{ markdown: kiolvasott.markdown, confidence: null, number: 1 }],
     opts,
     fromTextLayer: false,
-    officeKind: kiolvasott.fajtaNev,
+    kindLabel: kiolvasott.fajtaNev,
   });
 
   return {
@@ -818,6 +831,53 @@ async function processOffice(item, opts, onProgress) {
     bekezdesek: kiolvasott.bekezdesek || 0,
     tablak: kiolvasott.tablak || 0,
     munkalapok: kiolvasott.munkalapok || 0,
+  };
+}
+
+/**
+ * Szövegfájlok és e-könyvek: a konyv.js olvassa ki a tartalmat.
+ * A sima szöveg a közös Markdown-építőn megy át (a felhasználó
+ * beállításai szerint), az e-könyvek kész szerkezetet hoznak magukkal.
+ */
+async function processBook(item, opts, onProgress) {
+  if (!window.Konyv) throw new Error('a könyvolvasó (assets/konyv.js) nem töltődött be');
+
+  onProgress(0.1, `${window.Konyv.fajtaNev(item.kind)} olvasása`);
+  const kiolvasott = await window.Konyv.feldolgoz(item.file);
+
+  onProgress(0.9, 'Markdown összeállítása');
+
+  /* Szövegfájlnál a szerkezetet ugyanaz a logika rakja össze, mint az
+     OCR-nél – ott is tördelt, formázatlan szöveggel van dolgunk. */
+  const page = kiolvasott.markdown
+    ? { markdown: kiolvasott.markdown, confidence: null, number: 1 }
+    : { text: kiolvasott.nyersSzoveg, confidence: null, number: 1 };
+
+  const metaExtra = [];
+  if (kiolvasott.szerzo) metaExtra.push(`Szerző: ${kiolvasott.szerzo}`);
+  if (kiolvasott.fejezetek) metaExtra.push(`${kiolvasott.fejezetek} fejezet`);
+
+  const markdown = buildDocument({
+    title: kiolvasott.cim || baseName(baseFileName(item.label)),
+    source: item.label,
+    pages: [page],
+    opts,
+    fromTextLayer: false,
+    kindLabel: kiolvasott.fajtaNev,
+    metaExtra,
+  });
+
+  return {
+    markdown,
+    office: true,                 // ugyanúgy "beágyazott szövegből" készült
+    pages: 1,
+    chars: markdown.length,
+    confidence: null,
+    fromTextLayer: false,
+    bekezdesek: kiolvasott.sorok || 0,
+    tablak: 0,
+    munkalapok: 0,
+    fejezetek: kiolvasott.fejezetek || 0,
   };
 }
 
@@ -1227,7 +1287,7 @@ function pageToMarkdown(page, opts) {
   return out.join('\n\n');
 }
 
-function buildDocument({ title, source, pages, opts, fromTextLayer, officeKind = null }) {
+function buildDocument({ title, source, pages, opts, fromTextLayer, kindLabel = null, metaExtra = [] }) {
   const scored = pages.filter((p) => p.confidence !== null);
   const avg = scored.length ? Math.round(scored.reduce((s, p) => s + p.confidence, 0) / scored.length) : null;
   const now = new Date();
@@ -1251,9 +1311,10 @@ function buildDocument({ title, source, pages, opts, fromTextLayer, officeKind =
 
   const meta = [`Forrás: \`${source}\``];
 
-  if (officeKind) {
+  if (kindLabel) {
     /* Itt nem volt felismerés: a szöveg magából a dokumentumból jön. */
-    meta.push(officeKind);
+    meta.push(kindLabel);
+    for (const m of metaExtra) meta.push(m);
     meta.push(`kiolvasva: ${formatDateTime(now)}`);
   } else {
     meta.push(pages.length === 1 ? '1 oldal' : `${pages.length} oldal`);

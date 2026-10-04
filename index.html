@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OCR Szövegkinyerő – képekből, PDF-ekből és Office-fájlokból Markdown</title>
-  <meta name="description" content="Fotókból, PDF-ekből, Word- és Excel-fájlokból nyer ki szöveget, majd Markdown fájlként menti. Egész mappákat is feldolgoz. Teljesen a böngészőben fut, mesterséges intelligencia és feltöltés nélkül.">
-  <link rel="stylesheet" href="assets/styles.css?v=1.3.0">
+  <meta name="description" content="Fotókból, PDF-ekből, Word- és Excel-fájlokból, szövegfájlokból és e-könyvekből nyer ki szöveget, majd Markdown fájlként menti. Egész mappákat is feldolgoz. Teljesen a böngészőben fut, mesterséges intelligencia és feltöltés nélkül.">
+  <link rel="stylesheet" href="assets/styles.css?v=1.4.0">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E">
 
   <script>
@@ -46,7 +46,8 @@
 
   <script src="vendor/tesseract/tesseract.min.js"></script>
   <script src="vendor/fflate/fflate.min.js"></script>
-  <script src="assets/iroda.js?v=1.3.0"></script>
+  <script src="assets/iroda.js?v=1.4.0"></script>
+  <script src="assets/konyv.js?v=1.4.0"></script>
 </head>
 <body>
 
@@ -75,9 +76,10 @@
       <div class="dropzone__icon" aria-hidden="true">⬆</div>
       <p class="dropzone__main">Húzd ide a fájlokat vagy egy egész mappát, vagy <label for="fileInput" class="link">tallózz</label></p>
       <p class="dropzone__hint">Kép: JPG · PNG · WEBP · BMP · GIF · TIFF &nbsp;·&nbsp; Dokumentum: PDF · DOCX · DOC · XLSX · XLS</p>
+      <p class="dropzone__hint">Szöveg és e-könyv: TXT · EPUB · MOBI</p>
       <p class="dropzone__hint">Képernyőképet <kbd>Ctrl</kbd>+<kbd>V</kbd> billentyűvel is beilleszthetsz</p>
       <input id="fileInput" type="file" multiple
-             accept="image/*,application/pdf,.pdf,.tif,.tiff,.doc,.docx,.docm,.xls,.xlsx,.xlsm"
+             accept="image/*,application/pdf,.pdf,.tif,.tiff,.doc,.docx,.docm,.xls,.xlsx,.xlsm,.txt,.text,.epub,.mobi,.prc,.azw"
              class="visually-hidden" aria-label="Fájlok kiválasztása">
       <input id="folderInput" type="file" multiple webkitdirectory
              class="visually-hidden" aria-label="Mappa kiválasztása" tabindex="-1">
@@ -232,6 +234,7 @@
       <li><strong>Jó minőségű beolvasás = jó eredmény.</strong> Egyenes, éles, jól megvilágított kép, legalább 200–300 DPI. Ferde vagy homályos fotónál az OCR is hibázni fog.</li>
       <li><strong>Az eredmény szerkeszthető.</strong> Az OCR sosem tökéletes; a Markdown forrás nézetben javíthatod, mielőtt letöltöd.</li>
       <li><strong>Word és Excel: nincs OCR, nincs hibalehetőség.</strong> A DOCX, DOC, XLSX és XLS fájlokban valódi, gépi szöveg van – azt közvetlenül kiolvassuk, a címsorokkal, felsorolásokkal és táblázatokkal együtt. Felismerni csak azt kell, ami kép.</li>
+      <li><strong>Szövegfájl és e-könyv.</strong> A TXT, EPUB és MOBI fájlokból közvetlenül jön a szöveg. Régi szövegfájlnál a kódolást (UTF-8, közép-európai kódlap) magától felismeri, az e-könyveknél a fejezetek, címsorok és a könyv címe is megmarad.</li>
       <li><strong>Egész mappák.</strong> A <em>Mappa kiválasztása</em> gombbal vagy egy ráhúzott mappával az összes alkönyvtár is bekerül; a nem támogatott és a rejtett fájlok kimaradnak.</li>
       <li><strong>Képernyőkép egy mozdulattal.</strong> Készíts kivágást (Windows: <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, macOS: <kbd>Cmd</kbd>+<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd>), majd nyomj <kbd>Ctrl</kbd>+<kbd>V</kbd>-t ezen az oldalon – a kép azonnal a listába kerül.</li>
     </ul>
@@ -244,6 +247,6 @@
   <p id="appVersion" class="muted small">verzió: betöltés…</p>
 </footer>
 
-<script src="assets/app.js?v=1.3.0" defer></script>
+<script src="assets/app.js?v=1.4.0" defer></script>
 </body>
 </html>
